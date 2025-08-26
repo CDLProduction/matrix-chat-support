@@ -12,7 +12,8 @@
       "Bash(npm ls:*)",
       "Bash(npm run lint)",
       "Bash(chmod:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": [],
     "ask": []

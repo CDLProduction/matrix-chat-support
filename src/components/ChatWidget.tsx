@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { MatrixChatClient } from '@/utils/matrix-client'
 import { ChatMessage, UserDetails, MatrixChatWidgetProps, ChatState } from '@/types'
+import LongMessage from './LongMessage'
 import styles from '@/styles/widget.module.css'
 
 const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnect, onMessage }) => {
@@ -24,6 +25,7 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
 
   const clientRef = useRef<MatrixChatClient | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -85,30 +87,75 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
         isLoading: false,
         userDetails: userForm,
         roomId,
-        messages: [{
-          id: 'welcome',
-          text: 'Chat started. A support agent will be with you shortly.',
-          sender: 'support',
-          timestamp: Date.now(),
-          status: 'sent'
-        }]
+        messages: [
+          {
+            id: 'user-initial',
+            text: userForm.message,
+            sender: 'user',
+            timestamp: Date.now() - 1000,
+            status: 'sent'
+          },
+          {
+            id: 'welcome',
+            text: 'Thanks for your message! A support agent will be with you shortly. In the meantime, feel free to send any additional details.',
+            sender: 'support',
+            timestamp: Date.now(),
+            status: 'sent'
+          }
+        ]
       }))
 
       onConnect?.(roomId)
     } catch (error) {
-      setChatState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof Error ? error.message : 'Failed to start chat'
-      }))
-      onError?.(error instanceof Error ? error : new Error('Failed to start chat'))
+      // In demo mode, show a nice demo experience instead of an error
+      if (config.matrix.accessToken === 'DEMO_MODE_NO_CONNECTION') {
+        setChatState(prev => ({
+          ...prev,
+          isLoading: false,
+          userDetails: userForm,
+          roomId: 'demo-room',
+          messages: [
+            {
+              id: 'user-initial',
+              text: userForm.message,
+              sender: 'user',
+              timestamp: Date.now() - 1000,
+              status: 'sent'
+            },
+            {
+              id: 'demo-message',
+              text: '👋 This is a demo of the chat interface! In production, this would connect to your Matrix server and enable real-time support chat.',
+              sender: 'support',
+              timestamp: Date.now(),
+              status: 'sent'
+            },
+            {
+              id: 'demo-message-2',
+              text: 'Try typing a message in the box below to see how the chat would work!',
+              sender: 'support',
+              timestamp: Date.now() + 1000,
+              status: 'sent'
+            }
+          ]
+        }))
+        // In demo mode, simulate connected state
+        setChatState(prev => ({ ...prev, isConnected: true }))
+        onConnect?.('demo-room')
+      } else {
+        setChatState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Failed to start chat'
+        }))
+        onError?.(error instanceof Error ? error : new Error('Failed to start chat'))
+      }
     }
   }
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!currentMessage.trim() || !clientRef.current) {
+    if (!currentMessage.trim()) {
       return
     }
 
@@ -129,6 +176,61 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
     }))
 
     setCurrentMessage('')
+    
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '44px'
+    }
+
+    // In demo mode, simulate a response
+    if (config.matrix.accessToken === 'DEMO_MODE_NO_CONNECTION') {
+      // Mark message as sent
+      setTimeout(() => {
+        setChatState(prev => ({
+          ...prev,
+          messages: prev.messages.map(msg =>
+            msg.id === messageId ? { ...msg, status: 'sent' } : msg
+          )
+        }))
+        
+        // Simulate support response after delay
+        setTimeout(() => {
+          const responses = [
+            "Thanks for your message! I can help you with that.",
+            "I understand your concern. Let me look into this for you.",
+            "That's a great question! Here's what I can tell you...",
+            "I'm here to help! Can you provide a bit more detail?",
+            "I see what you mean. This is a common question we get."
+          ]
+          
+          const randomResponse = responses[Math.floor(Math.random() * responses.length)]
+          
+          setChatState(prev => ({
+            ...prev,
+            messages: [...prev.messages, {
+              id: `demo-response-${Date.now()}`,
+              text: randomResponse,
+              sender: 'support',
+              timestamp: Date.now(),
+              status: 'sent'
+            }]
+          }))
+        }, 1500)
+        
+      }, 500)
+      return
+    }
+
+    // Real Matrix integration
+    if (!clientRef.current) {
+      setChatState(prev => ({
+        ...prev,
+        messages: prev.messages.map(msg =>
+          msg.id === messageId ? { ...msg, status: 'error' } : msg
+        )
+      }))
+      return
+    }
 
     try {
       await clientRef.current.sendMessage(messageText)
@@ -154,10 +256,19 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
   }
 
   const positionClass = config.widget.position || 'bottom-right'
-  const cssClass = positionClass.replace('-', '') as keyof typeof styles
+  
+  const getPositionClass = () => {
+    switch (positionClass) {
+      case 'bottom-right': return styles.bottomRight
+      case 'bottom-left': return styles.bottomLeft
+      case 'top-right': return styles.topRight
+      case 'top-left': return styles.topLeft
+      default: return styles.bottomRight
+    }
+  }
 
   return (
-    <div className={`${styles.widgetContainer} ${styles[cssClass]}`}>
+    <div className={`${styles.widgetContainer} ${getPositionClass()}`}>
       {!chatState.isOpen && (
         <button 
           className={styles.chatButton} 
@@ -204,56 +315,58 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
 
             {!chatState.userDetails && !chatState.isLoading && (
               <form className={styles.userForm} onSubmit={handleStartChat}>
-                <p>{config.widget.greeting || 'Please provide your details to start chatting with our support team.'}</p>
+                <div style={{ marginBottom: '8px' }}>
+                  <p style={{ margin: '0 0 16px 0', color: '#555', lineHeight: '1.4', fontSize: '14px' }}>
+                    {config.widget.greeting || 'Hi! We\'d love to help. Please share your details and message to get started.'}
+                  </p>
+                </div>
                 
                 <div className={styles.formGroup}>
-                  <label htmlFor="name">Name *</label>
+                  <label htmlFor="name">Your Name *</label>
                   <input
                     id="name"
                     type="text"
                     value={userForm.name}
                     onChange={(e) => handleFormChange('name', e.target.value)}
+                    placeholder="Enter your full name"
                     required
                   />
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label htmlFor="email">Email *</label>
+                  <label htmlFor="email">Email Address *</label>
                   <input
                     id="email"
                     type="email"
                     value={userForm.email}
                     onChange={(e) => handleFormChange('email', e.target.value)}
+                    placeholder="your.email@example.com"
                     required
                   />
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label htmlFor="phone">Phone (optional)</label>
-                  <input
-                    id="phone"
-                    type="tel"
-                    value={userForm.phone}
-                    onChange={(e) => handleFormChange('phone', e.target.value)}
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label htmlFor="message">How can we help you? (optional)</label>
+                  <label htmlFor="message">Your Message *</label>
                   <textarea
                     id="message"
                     value={userForm.message}
                     onChange={(e) => handleFormChange('message', e.target.value)}
-                    placeholder={config.widget.placeholderText || 'Describe your issue...'}
+                    placeholder={config.widget.placeholderText || 'How can we help you today? Please describe your question or issue...'}
+                    required
                   />
                 </div>
 
                 <button 
                   type="submit" 
                   className={styles.submitButton}
-                  disabled={!userForm.name.trim() || !userForm.email.trim()}
+                  disabled={!userForm.name.trim() || !userForm.email.trim() || !userForm.message.trim()}
                 >
-                  Start Chat
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    Send Message
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z"/>
+                    </svg>
+                  </span>
                 </button>
               </form>
             )}
@@ -268,7 +381,10 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
                         message.sender === 'user' ? styles.messageUser : styles.messageSupport
                       } ${message.status === 'error' ? styles.messageError : ''}`}
                     >
-                      {message.text}
+                      <LongMessage 
+                        text={message.text} 
+                        maxLength={300}
+                      />
                       {message.status && message.sender === 'user' && (
                         <div className={styles.messageStatus}>
                           {message.status === 'sending' ? 'Sending...' : 
@@ -281,19 +397,44 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
                 </div>
 
                 <form className={styles.chatInput} onSubmit={handleSendMessage}>
-                  <input
-                    type="text"
+                  <textarea
+                    ref={textareaRef}
                     value={currentMessage}
-                    onChange={(e) => setCurrentMessage(e.target.value)}
-                    placeholder="Type your message..."
+                    onChange={(e) => {
+                      setCurrentMessage(e.target.value)
+                      // Auto-resize textarea with proper constraints
+                      const textarea = e.target as HTMLTextAreaElement
+                      textarea.style.height = '44px' // Reset to min height
+                      const newHeight = Math.min(Math.max(textarea.scrollHeight, 44), 100)
+                      textarea.style.height = newHeight + 'px'
+                    }}
+                    onKeyDown={(e) => {
+                      // Send on Enter (but allow Shift+Enter for new lines)
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        if (currentMessage.trim() && chatState.isConnected) {
+                          handleSendMessage(e as any)
+                        }
+                      }
+                    }}
+                    placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
                     disabled={!chatState.isConnected}
+                    rows={1}
+                    style={{ 
+                      height: '44px',
+                      minHeight: '44px',
+                      maxHeight: '100px'
+                    }}
                   />
                   <button 
                     type="submit" 
                     className={styles.sendButton}
                     disabled={!currentMessage.trim() || !chatState.isConnected}
+                    title="Send message"
                   >
-                    Send
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z"/>
+                    </svg>
                   </button>
                 </form>
               </div>

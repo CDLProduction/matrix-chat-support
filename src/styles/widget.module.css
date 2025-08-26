@@ -74,30 +74,40 @@
 
 /* Chat Modal */
 .chatModal {
-  position: absolute;
-  bottom: 80px;
-  right: 0;
+  position: fixed;
   width: 380px;
-  height: 500px;
+  height: 600px;
+  max-height: calc(100vh - 120px);
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   animation: slideUp 0.3s ease;
+  z-index: 1000000;
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-.bottomLeft .chatModal,
-.topLeft .chatModal {
-  right: auto;
-  left: 0;
+/* Position modal based on widget position */
+.bottomRight .chatModal {
+  bottom: 90px;
+  right: 20px;
 }
 
-.topRight .chatModal,
+.bottomLeft .chatModal {
+  bottom: 90px;
+  left: 20px;
+}
+
+.topRight .chatModal {
+  top: 90px;
+  right: 20px;
+}
+
 .topLeft .chatModal {
-  bottom: auto;
-  top: 80px;
+  top: 90px;
+  left: 20px;
 }
 
 @keyframes slideUp {
@@ -115,10 +125,11 @@
 .modalHeader {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 16px;
+  padding: 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: relative;
 }
 
 .headerText h3 {
@@ -153,66 +164,108 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 /* User Form */
 .userForm {
-  padding: 20px;
+  padding: 20px 24px 24px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Custom scrollbar styling */
+.userForm::-webkit-scrollbar {
+  width: 6px;
+}
+
+.userForm::-webkit-scrollbar-track {
+  background: #f1f3f4;
+  border-radius: 3px;
+}
+
+.userForm::-webkit-scrollbar-thumb {
+  background: #c1c5c9;
+  border-radius: 3px;
+}
+
+.userForm::-webkit-scrollbar-thumb:hover {
+  background: #a8adb3;
 }
 
 .formGroup {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .formGroup label {
-  font-weight: 500;
-  font-size: 13px;
-  color: #555;
+  font-weight: 600;
+  font-size: 14px;
+  color: #444;
+  margin-bottom: 2px;
 }
 
 .formGroup input,
 .formGroup textarea {
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 14px;
-  transition: border-color 0.2s ease;
+  padding: 14px 16px;
+  border: 2px solid #e1e5e9;
+  border-radius: 10px;
+  font-size: 15px;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  background: #fafbfc;
 }
 
 .formGroup input:focus,
 .formGroup textarea:focus {
   outline: none;
   border-color: #667eea;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .formGroup textarea {
   resize: vertical;
   min-height: 80px;
+  max-height: 120px;
+  line-height: 1.5;
 }
 
 .submitButton {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  padding: 12px 24px;
-  border-radius: 6px;
-  font-weight: 500;
+  padding: 16px 32px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 15px;
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  position: relative;
+  overflow: hidden;
+  margin-top: 8px;
 }
 
-.submitButton:hover {
-  opacity: 0.9;
+.submitButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+.submitButton:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .submitButton:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
 }
 
 /* Chat Interface */
@@ -220,90 +273,178 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  background: #ffffff;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .messagesContainer {
   flex: 1;
-  padding: 16px;
+  padding: 24px 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: #fafbfc;
+  min-height: 0;
+}
+
+/* Custom scrollbar for messages */
+.messagesContainer::-webkit-scrollbar {
+  width: 6px;
+}
+
+.messagesContainer::-webkit-scrollbar-track {
+  background: #f1f3f4;
+  border-radius: 3px;
+}
+
+.messagesContainer::-webkit-scrollbar-thumb {
+  background: #c1c5c9;
+  border-radius: 3px;
+}
+
+.messagesContainer::-webkit-scrollbar-thumb:hover {
+  background: #a8adb3;
 }
 
 .message {
   max-width: 80%;
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-size: 14px;
-  line-height: 1.4;
+  padding: 14px 18px;
+  border-radius: 18px;
+  font-size: 15px;
+  line-height: 1.45;
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  position: relative;
 }
 
 .messageUser {
   align-self: flex-end;
-  background: #667eea;
+  background: linear-gradient(135deg, #667eea 0%, #5a67d8 100%);
   color: white;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 6px;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
 }
 
 .messageSupport {
   align-self: flex-start;
-  background: #f1f3f4;
-  color: #333;
-  border-bottom-left-radius: 4px;
+  background: white;
+  color: #2d3748;
+  border-bottom-left-radius: 6px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .messageStatus {
   font-size: 11px;
-  opacity: 0.7;
-  margin-top: 4px;
+  opacity: 0.8;
+  margin-top: 6px;
+  font-style: italic;
 }
 
 .messageError {
-  background: #fee;
-  border: 1px solid #fcc;
+  background: #fed7d7 !important;
+  border: 1px solid #feb2b2 !important;
+  color: #c53030 !important;
 }
 
 /* Chat Input */
 .chatInput {
-  padding: 16px;
-  border-top: 1px solid #eee;
+  padding: 16px 20px;
+  border-top: 1px solid #f1f3f4;
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  background: #ffffff;
+  align-items: flex-end;
+  flex-shrink: 0;
+  min-height: 76px;
+  max-height: 160px;
 }
 
-.chatInput input {
+.chatInput textarea {
   flex: 1;
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 20px;
-  font-size: 14px;
+  padding: 12px 18px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 22px;
+  font-size: 15px;
   outline: none;
-  transition: border-color 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: #f7fafc;
+  font-family: inherit;
+  min-height: 44px;
+  max-height: 100px;
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.5;
+  color: #2d3748;
+  box-sizing: border-box;
 }
 
-.chatInput input:focus {
+.chatInput textarea:focus {
   border-color: #667eea;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+}
+
+.chatInput textarea::placeholder {
+  color: #a0aec0;
+}
+
+/* Custom scrollbar for chat input */
+.chatInput textarea::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chatInput textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chatInput textarea::-webkit-scrollbar-thumb {
+  background: #c1c5c9;
+  border-radius: 2px;
+}
+
+.chatInput textarea::-webkit-scrollbar-thumb:hover {
+  background: #a8adb3;
 }
 
 .sendButton {
-  background: #667eea;
+  background: linear-gradient(135deg, #667eea 0%, #5a67d8 100%);
   color: white;
   border: none;
-  padding: 10px 16px;
-  border-radius: 20px;
+  padding: 0;
+  border-radius: 50%;
   cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 12px rgba(102, 126, 234, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  align-self: flex-end;
+  margin-bottom: 0;
 }
 
-.sendButton:hover {
-  background: #5a6fd8;
+.sendButton:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.05);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.35);
+}
+
+.sendButton:active:not(:disabled) {
+  transform: translateY(0) scale(1.02);
 }
 
 .sendButton:disabled {
-  opacity: 0.6;
+  opacity: 0.4;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 1px 4px rgba(102, 126, 234, 0.15);
 }
 
 /* Loading States */
@@ -344,9 +485,28 @@
 /* Mobile Responsiveness */
 @media (max-width: 480px) {
   .chatModal {
-    width: calc(100vw - 40px);
-    height: calc(100vh - 120px);
-    max-height: 600px;
+    width: calc(100vw - 20px);
+    height: calc(100vh - 100px);
+    max-height: none;
+  }
+  
+  .bottomRight .chatModal,
+  .bottomLeft .chatModal {
+    bottom: 20px;
+    left: 10px;
+    right: 10px;
+  }
+  
+  .topRight .chatModal,
+  .topLeft .chatModal {
+    top: 20px;
+    left: 10px;
+    right: 10px;
+  }
+  
+  .userForm {
+    padding: 16px;
+    gap: 16px;
   }
 }
 
