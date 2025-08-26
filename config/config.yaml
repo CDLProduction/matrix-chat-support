@@ -1,0 +1,65 @@
+# Matrix Chat Support Widget Configuration
+# Copy this file and modify it according to your setup
+
+# Matrix server configuration
+matrix:
+  # Your Matrix homeserver URL (e.g., https://matrix.org or https://your-domain.com)
+  homeserver: "https://matrix.org"
+  
+  # Access token for the support bot user
+  # You can get this by logging in as the bot user and extracting the token
+  # Or create it via the Matrix Admin API
+  access_token: "YOUR_ACCESS_TOKEN_HERE"
+  
+  # Optional: Pre-existing support room ID
+  # If set, all support conversations will happen in this room
+  # If not set, a new room will be created for each conversation
+  support_room_id: null
+  
+  # Optional: Bot user ID to invite to new rooms
+  # This should be the user ID of your support bot (e.g., @supportbot:your-domain.com)
+  bot_user_id: null
+
+# Widget appearance and behavior
+widget:
+  # Title shown in the chat header
+  title: "Support Chat"
+  
+  # Subtitle shown in the chat header
+  subtitle: "We're here to help!"
+  
+  # Primary brand color (used for buttons and highlights)
+  brand_color: "#667eea"
+  
+  # Widget position on the page
+  # Options: "bottom-right", "bottom-left", "top-right", "top-left"
+  position: "bottom-right"
+  
+  # Greeting message shown in the contact form
+  greeting: "Hi! How can we help you today? Please provide your details and we'll connect you with a support agent."
+  
+  # Placeholder text for the initial message textarea
+  placeholder_text: "Describe your issue or question..."
+
+# Server configuration
+server:
+  # Port for the config server to run on
+  port: 3001
+  
+  # Allow CORS from these origins (use ["*"] for all origins in development)
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:5173"
+    # Add your production domains here
+    # - "https://your-website.com"
+  
+  # Path to serve the widget assets from
+  static_path: "./dist/widget"
+
+# Logging configuration
+logging:
+  # Log level: "debug", "info", "warn", "error"
+  level: "info"
+  
+  # Log to file (optional)
+  file: null

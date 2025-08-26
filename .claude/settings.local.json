@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/cdl/**)",
+      "Read(//home/cdl/**)",
+      "WebSearch",
+      "Bash(npm install)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run build:widget:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run serve:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm run lint)",
+      "Bash(chmod:*)",
+      "Bash(curl:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

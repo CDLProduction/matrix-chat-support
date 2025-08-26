@@ -1,0 +1,32 @@
+declare const styles: {
+  readonly widgetContainer: string;
+  readonly bottomRight: string;
+  readonly bottomLeft: string;
+  readonly topRight: string;
+  readonly topLeft: string;
+  readonly chatButton: string;
+  readonly chatButtonIcon: string;
+  readonly chatModal: string;
+  readonly modalHeader: string;
+  readonly headerText: string;
+  readonly closeButton: string;
+  readonly modalContent: string;
+  readonly userForm: string;
+  readonly formGroup: string;
+  readonly submitButton: string;
+  readonly chatInterface: string;
+  readonly messagesContainer: string;
+  readonly message: string;
+  readonly messageUser: string;
+  readonly messageSupport: string;
+  readonly messageStatus: string;
+  readonly messageError: string;
+  readonly chatInput: string;
+  readonly sendButton: string;
+  readonly loading: string;
+  readonly loadingSpinner: string;
+  readonly error: string;
+  readonly notificationBadge: string;
+};
+
+export default styles;
