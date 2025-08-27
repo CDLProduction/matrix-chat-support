@@ -4,12 +4,12 @@
 # Matrix server configuration
 matrix:
   # Your Matrix homeserver URL (e.g., https://matrix.org or https://your-domain.com)
-  homeserver: "https://matrix.org"
+  homeserver: "http://localhost:8008"
   
   # Access token for the support bot user
   # You can get this by logging in as the bot user and extracting the token
   # Or create it via the Matrix Admin API
-  access_token: "YOUR_ACCESS_TOKEN_HERE"
+  access_token: "syt_c3VwcG9ydA_MYZvPoVGyryyUyqTGpKV_2vAk66"
   
   # Optional: Pre-existing support room ID
   # If set, all support conversations will happen in this room
@@ -18,7 +18,7 @@ matrix:
   
   # Optional: Bot user ID to invite to new rooms
   # This should be the user ID of your support bot (e.g., @supportbot:your-domain.com)
-  bot_user_id: null
+  bot_user_id: "@support:localhost"
 
 # Widget appearance and behavior
 widget:
@@ -50,6 +50,8 @@ server:
   cors_origins:
     - "http://localhost:3000"
     - "http://localhost:5173"
+    - "http://localhost:8000"
+    - "file://"
     # Add your production domains here
     # - "https://your-website.com"
   

@@ -14,6 +14,7 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
     error: undefined,
     roomId: undefined
   })
+  const [successMessage, setSuccessMessage] = useState<string | undefined>()
 
   const [currentMessage, setCurrentMessage] = useState('')
   const [userForm, setUserForm] = useState<UserDetails>({
@@ -50,7 +51,7 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
   const handleStartChat = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!userForm.name.trim() || !userForm.email.trim()) {
+    if (!userForm.name.trim() || !userForm.email.trim() || !userForm.message.trim()) {
       return
     }
 
@@ -73,7 +74,25 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
         })
 
         clientRef.current.onError((error) => {
-          setChatState(prev => ({ ...prev, error: error.message, isLoading: false }))
+          let userFriendlyMessage = error.message
+          
+          // Transform technical Matrix errors into user-friendly messages
+          if (error.message.includes('already in the room')) {
+            // Don't treat this as an error - it's actually success
+            setSuccessMessage('Connected successfully! You can start chatting now.')
+            setChatState(prev => ({ ...prev, isLoading: false, isConnected: true, error: undefined }))
+            // Clear success message after 3 seconds
+            setTimeout(() => setSuccessMessage(undefined), 3000)
+            return
+          } else if (error.message.includes('M_FORBIDDEN')) {
+            userFriendlyMessage = 'Unable to connect to support chat. Please try again later.'
+          } else if (error.message.includes('Failed to get user ID')) {
+            userFriendlyMessage = 'Connection issue. Please refresh the page and try again.'
+          } else if (error.message.includes('Network')) {
+            userFriendlyMessage = 'Network connection problem. Please check your internet and try again.'
+          }
+          
+          setChatState(prev => ({ ...prev, error: userFriendlyMessage, isLoading: false }))
           onError?.(error)
         })
 
@@ -179,7 +198,7 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
     
     // Reset textarea height
     if (textareaRef.current) {
-      textareaRef.current.style.height = '44px'
+      textareaRef.current.style.height = '36px'
     }
 
     // In demo mode, simulate a response
@@ -306,6 +325,12 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
               </div>
             )}
 
+            {successMessage && (
+              <div className={styles.success}>
+                {successMessage}
+              </div>
+            )}
+
             {chatState.isLoading && (
               <div className={styles.loading}>
                 <div className={styles.loadingSpinner}></div>
@@ -342,6 +367,17 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
                     onChange={(e) => handleFormChange('email', e.target.value)}
                     placeholder="your.email@example.com"
                     required
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label htmlFor="phone">Phone Number</label>
+                  <input
+                    id="phone"
+                    type="tel"
+                    value={userForm.phone}
+                    onChange={(e) => handleFormChange('phone', e.target.value)}
+                    placeholder="+1 (555) 123-4567"
                   />
                 </div>
 
@@ -404,8 +440,8 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
                       setCurrentMessage(e.target.value)
                       // Auto-resize textarea with proper constraints
                       const textarea = e.target as HTMLTextAreaElement
-                      textarea.style.height = '44px' // Reset to min height
-                      const newHeight = Math.min(Math.max(textarea.scrollHeight, 44), 100)
+                      textarea.style.height = '36px' // Reset to min height
+                      const newHeight = Math.min(Math.max(textarea.scrollHeight, 36), 100)
                       textarea.style.height = newHeight + 'px'
                     }}
                     onKeyDown={(e) => {
@@ -421,8 +457,8 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
                     disabled={!chatState.isConnected}
                     rows={1}
                     style={{ 
-                      height: '44px',
-                      minHeight: '44px',
+                      height: '36px',
+                      minHeight: '36px',
                       maxHeight: '100px'
                     }}
                   />
@@ -432,7 +468,7 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
                     disabled={!currentMessage.trim() || !chatState.isConnected}
                     title="Send message"
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M2,21L23,12L2,3V10L17,12L2,14V21Z"/>
                     </svg>
                   </button>

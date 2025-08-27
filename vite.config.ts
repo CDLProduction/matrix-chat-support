@@ -20,6 +20,11 @@ export default defineConfig(({ mode }) => {
           : '[name]__[local]___[hash:base64:5]'
       }
     },
+    define: isWidget ? {
+      'process.env': {},
+      'process.env.NODE_ENV': '"production"',
+      global: 'globalThis',
+    } : undefined,
     build: isWidget ? {
       lib: {
         entry: resolve(__dirname, 'src/widget.tsx'),
@@ -30,7 +35,8 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           inlineDynamicImports: true,
-          manualChunks: undefined
+          manualChunks: undefined,
+          exports: 'named'
         }
       },
       outDir: 'dist/widget'

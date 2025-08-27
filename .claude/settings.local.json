@@ -13,9 +13,22 @@
       "Bash(npm run lint)",
       "Bash(chmod:*)",
       "Bash(curl:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(./scripts/docker-setup.sh:*)",
+      "Bash(docker:*)",
+      "Bash(docker compose:*)",
+      "Bash(sudo docker compose:*)",
+      "Bash(groups $USER)",
+      "Bash(systemctl:*)",
+      "Bash(sudo systemctl status:*)",
+      "Bash(python3:*)",
+      "Bash(npm cache clean:*)",
+      "Bash(./scripts/get-access-token.sh:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "/run"
+    ]
   }
 }

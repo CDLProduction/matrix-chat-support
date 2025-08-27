@@ -81,9 +81,56 @@ loadConfig()
 app.use(express.json())
 
 app.use(cors({
-  origin: config.server?.cors_origins || ['http://localhost:3000'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Allow any localhost port during development
+    if (origin.match(/^https?:\/\/localhost(:\d+)?$/)) {
+      return callback(null, true);
+    }
+    
+    // Allow configured origins
+    const allowedOrigins = config.server?.cors_origins || [];
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Reject other origins
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }))
+
+// Set CSP headers to allow widget loading
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', 
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data: blob:; " +
+    "connect-src 'self' ws: wss: http: https:; " +
+    "font-src 'self' data:; " +
+    "frame-src 'none'; " +
+    "object-src 'none';"
+  )
+  next()
+})
+
+// Basic index route
+app.get('/', (req, res) => {
+  res.json({
+    name: 'Matrix Chat Support Widget Server',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      config: '/api/config',
+      health: '/health',
+      embed: '/embed.js',
+      widget: '/widget/'
+    }
+  })
+})
 
 app.get('/api/config', (req, res) => {
   if (!validateConfig()) {
@@ -148,6 +195,12 @@ app.get('/embed.js', (req, res) => {
   fetch('${req.protocol}://${req.get('host')}/api/config')
     .then(response => response.json())
     .then(config => {
+      // Load widget CSS
+      const cssLink = document.createElement('link');
+      cssLink.rel = 'stylesheet';
+      cssLink.href = '${req.protocol}://${req.get('host')}/widget/style.css';
+      document.head.appendChild(cssLink);
+      
       // Load widget script
       const script = document.createElement('script');
       script.src = '${req.protocol}://${req.get('host')}/widget/matrix-chat-widget.iife.js';

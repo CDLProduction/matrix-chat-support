@@ -70,8 +70,17 @@ export class MatrixChatClient {
       const response = await this.client.createRoom(roomOptions)
       this.currentRoomId = response.room_id
 
-      if (this.config.botUserId) {
-        await this.client.invite(this.currentRoomId, this.config.botUserId)
+      // Only invite bot user if it's different from the current user
+      const currentUserId = await this.getUserId()
+      if (this.config.botUserId && this.config.botUserId !== currentUserId) {
+        try {
+          await this.client.invite(this.currentRoomId, this.config.botUserId)
+        } catch (error) {
+          // Ignore "user already in room" errors
+          if (!error.message?.includes('already in the room')) {
+            throw error
+          }
+        }
       }
 
       await this.sendMessage(`New support request from ${userDetails.name}\n\nEmail: ${userDetails.email}${userDetails.phone ? `\nPhone: ${userDetails.phone}` : ''}${userDetails.message ? `\n\nInitial message: ${userDetails.message}` : ''}`)
