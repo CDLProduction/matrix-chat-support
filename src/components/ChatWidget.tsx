@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { MatrixChatClient } from '@/utils/matrix-client'
 import { ChatMessage, UserDetails, MatrixChatWidgetProps, ChatState } from '@/types'
+import { loadChatSession, updateUserDetails, incrementConversationCount, isReturningUser, clearChatSession, getSessionInfo } from '@/utils/chat-storage'
 import LongMessage from './LongMessage'
 import styles from '@/styles/widget.module.css'
 
@@ -12,7 +13,9 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
     messages: [],
     userDetails: undefined,
     error: undefined,
-    roomId: undefined
+    roomId: undefined,
+    session: undefined,
+    isLoadingHistory: false
   })
   const [successMessage, setSuccessMessage] = useState<string | undefined>()
 
@@ -31,6 +34,19 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
+
+  // Initialize session on component mount
+  useEffect(() => {
+    const session = loadChatSession()
+    setChatState(prev => ({ ...prev, session }))
+    
+    // Pre-fill form if user has previous details
+    if (session.userDetails) {
+      setUserForm(session.userDetails)
+    }
+    
+    console.log('🔄 Session initialized:', getSessionInfo())
+  }, [])
 
   useEffect(() => {
     scrollToBottom()
@@ -96,32 +112,58 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
           onError?.(error)
         })
 
-        await clientRef.current.connect()
+        await clientRef.current.connect(userForm)
       }
 
+      // Update user details in persistent storage
+      updateUserDetails(userForm)
+      
       const roomId = await clientRef.current.createOrJoinSupportRoom(userForm)
+      
+      // Check if this is a returning user with existing history
+      const session = loadChatSession()
+      let messages: ChatMessage[] = []
+      
+      if (session.isReturningUser && roomId) {
+        try {
+          setChatState(prev => ({ ...prev, isLoadingHistory: true }))
+          
+          // Try to load existing message history
+          const historyMessages = await clientRef.current.loadMessageHistory(roomId, 50)
+          
+          if (historyMessages.length > 0) {
+            messages = historyMessages
+            console.log('📚 Loaded conversation history:', historyMessages.length, 'messages')
+          } else {
+            // No history found - messages will arrive via Matrix timeline events
+            // Don't create fake messages, let the real Matrix messages populate the chat
+            messages = []
+            console.log('📪 No existing history, starting fresh conversation')
+          }
+        } catch (error) {
+          console.warn('Failed to load message history:', error)
+          // Fall back to empty messages - Matrix will populate via timeline events
+          messages = []
+          console.log('📪 History loading failed, starting fresh')
+        } finally {
+          setChatState(prev => ({ ...prev, isLoadingHistory: false }))
+        }
+      } else {
+        // New user - let Matrix populate messages via timeline events
+        messages = []
+        console.log('👤 New user conversation starting')
+      }
+
+      // Increment conversation count for analytics
+      incrementConversationCount()
       
       setChatState(prev => ({
         ...prev,
         isLoading: false,
         userDetails: userForm,
         roomId,
-        messages: [
-          {
-            id: 'user-initial',
-            text: userForm.message,
-            sender: 'user',
-            timestamp: Date.now() - 1000,
-            status: 'sent'
-          },
-          {
-            id: 'welcome',
-            text: 'Thanks for your message! A support agent will be with you shortly. In the meantime, feel free to send any additional details.',
-            sender: 'support',
-            timestamp: Date.now(),
-            status: 'sent'
-          }
-        ]
+        messages,
+        session: loadChatSession() // Refresh session data
       }))
 
       onConnect?.(roomId)
@@ -344,6 +386,49 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
                   <p style={{ margin: '0 0 16px 0', color: '#555', lineHeight: '1.4', fontSize: '14px' }}>
                     {config.widget.greeting || 'Hi! We\'d love to help. Please share your details and message to get started.'}
                   </p>
+                  
+                  {/* Returning user indicator */}
+                  {chatState.session?.isReturningUser && chatState.session?.conversationCount > 0 && (
+                    <div style={{
+                      background: 'linear-gradient(135deg, #f0fff4 0%, #c6f6d5 100%)',
+                      border: '1px solid #9ae6b4',
+                      borderRadius: '8px',
+                      padding: '12px 16px',
+                      marginBottom: '16px',
+                      fontSize: '13px',
+                      color: '#2f855a'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                        <span style={{ fontSize: '14px' }}>👋</span>
+                        <div>
+                          <strong>Welcome back!</strong><br />
+                          You've had {chatState.session.conversationCount} previous conversation{chatState.session.conversationCount !== 1 ? 's' : ''} with our support team.
+                          <br />
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              clearChatSession();
+                              const newSession = loadChatSession();
+                              setChatState(prev => ({ ...prev, session: newSession }));
+                              setUserForm({ name: '', email: '', phone: '', message: '' });
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#2f855a',
+                              textDecoration: 'underline',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              marginTop: '4px',
+                              padding: '0'
+                            }}
+                          >
+                            Start fresh conversation
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
                 <div className={styles.formGroup}>
@@ -410,6 +495,45 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
             {chatState.userDetails && !chatState.isLoading && (
               <div className={styles.chatInterface}>
                 <div className={styles.messagesContainer}>
+                  {/* History loading indicator */}
+                  {chatState.isLoadingHistory && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '20px',
+                      color: '#666',
+                      fontSize: '14px',
+                      fontStyle: 'italic'
+                    }}>
+                      <div style={{
+                        width: '16px',
+                        height: '16px',
+                        border: '2px solid #ddd',
+                        borderTop: '2px solid #4F46E5',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite',
+                        marginRight: '8px'
+                      }}></div>
+                      Loading conversation history...
+                    </div>
+                  )}
+                  
+                  {/* Conversation history indicator */}
+                  {chatState.session?.isReturningUser && chatState.messages.length > 2 && !chatState.isLoadingHistory && (
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '12px',
+                      fontSize: '12px',
+                      color: '#666',
+                      borderBottom: '1px solid #e2e8f0',
+                      marginBottom: '16px',
+                      fontStyle: 'italic'
+                    }}>
+                      📚 Previous conversation history loaded
+                    </div>
+                  )}
+                  
                   {chatState.messages.map((message) => (
                     <div
                       key={message.id}

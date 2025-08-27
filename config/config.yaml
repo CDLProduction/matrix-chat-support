@@ -9,7 +9,7 @@ matrix:
   # Access token for the support bot user
   # You can get this by logging in as the bot user and extracting the token
   # Or create it via the Matrix Admin API
-  access_token: "syt_c3VwcG9ydA_MYZvPoVGyryyUyqTGpKV_2vAk66"
+  access_token: "syt_c3VwcG9ydA_SYpMJVUtylrVQXtOfZJL_4QlNhQ"
   
   # Optional: Pre-existing support room ID
   # If set, all support conversations will happen in this room

@@ -29,6 +29,16 @@ export interface ChatMessage {
   status?: 'sending' | 'sent' | 'error'
 }
 
+export interface ChatSession {
+  userId: string
+  matrixUserId?: string
+  roomId?: string
+  userDetails?: UserDetails
+  lastActivity: string
+  conversationCount: number
+  isReturningUser: boolean
+}
+
 export interface ChatState {
   isOpen: boolean
   isConnected: boolean
@@ -37,6 +47,8 @@ export interface ChatState {
   roomId?: string
   error?: string
   userDetails?: UserDetails
+  session?: ChatSession
+  isLoadingHistory?: boolean
 }
 
 export interface MatrixChatWidgetProps {

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persistence Test - Matrix Chat Widget</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        
+        .test-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .test-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        .test-button:hover {
+            background: #5a6fd8;
+        }
+        
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .status.info {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            color: #1976d2;
+        }
+        
+        .status.success {
+            background: #e8f5e8;
+            border: 1px solid #81c784;
+            color: #388e3c;
+        }
+        
+        .status.error {
+            background: #ffebee;
+            border: 1px solid #ef5350;
+            color: #d32f2f;
+        }
+        
+        #storage-debug {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Chat Persistence Test Page</h1>
+    
+    <div class="test-panel">
+        <h2>Testing Instructions</h2>
+        <p><strong>Purpose:</strong> Test that chat history persists across page refreshes and browser sessions.</p>
+        
+        <h3>📝 Test Steps:</h3>
+        <ol>
+            <li><strong>Start Chat:</strong> Click the chat button, fill form, and send a message</li>
+            <li><strong>Send Messages:</strong> Send 2-3 messages in the conversation</li>
+            <li><strong>Refresh Page:</strong> Reload this page (F5 or Ctrl+R)</li>
+            <li><strong>Reopen Chat:</strong> Click chat button again</li>
+            <li><strong>Verify History:</strong> Check if previous messages are restored</li>
+        </ol>
+        
+        <h3>✅ Expected Results:</h3>
+        <ul>
+            <li>Form should be pre-filled with previous contact details</li>
+            <li>Previous conversation history should appear in chat</li>
+            <li>Should continue in same Matrix room (not create new one)</li>
+            <li>New messages should sync with existing room</li>
+        </ul>
+    </div>
+    
+    <div class="test-panel">
+        <h2>🔧 Debug Tools</h2>
+        <button class="test-button" onclick="showStorageDebug()">Show Storage Data</button>
+        <button class="test-button" onclick="clearStorage()">Clear Storage</button>
+        <button class="test-button" onclick="refreshConfig()">Reload Config</button>
+        
+        <div id="status-area"></div>
+        <div id="storage-debug" style="display: none;"></div>
+    </div>
+    
+    <div class="test-panel">
+        <h2>🎯 Test Status</h2>
+        <div id="test-progress">
+            <div class="status info">Ready to test - Click the chat button to begin</div>
+        </div>
+    </div>
+
+    <!-- Matrix Chat Widget -->
+    <script src="http://localhost:3001/embed.js"></script>
+
+    <script>
+        let testStage = 0;
+        const testStages = [
+            'Ready to test',
+            'Chat started',
+            'Messages sent', 
+            'Page refreshed',
+            'History loaded'
+        ];
+
+        function updateStatus(message, type = 'info') {
+            const statusArea = document.getElementById('status-area');
+            statusArea.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        function updateTestProgress(stage, message) {
+            testStage = stage;
+            const progressArea = document.getElementById('test-progress');
+            progressArea.innerHTML = `<div class="status ${stage >= 4 ? 'success' : 'info'}">Stage ${stage}/4: ${message}</div>`;
+        }
+
+        function showStorageDebug() {
+            const debugDiv = document.getElementById('storage-debug');
+            debugDiv.style.display = debugDiv.style.display === 'none' ? 'block' : 'none';
+            
+            if (debugDiv.style.display === 'block') {
+                try {
+                    const sessionData = localStorage.getItem('matrix-chat-session');
+                    const parsedData = sessionData ? JSON.parse(sessionData) : null;
+                    
+                    const debugInfo = {
+                        'LocalStorage Session': parsedData,
+                        'Cookies': document.cookie.split(';').reduce((acc, cookie) => {
+                            const [key, value] = cookie.trim().split('=');
+                            if (key.includes('matrix')) acc[key] = value;
+                            return acc;
+                        }, {}),
+                        'Session Storage': Object.keys(sessionStorage).filter(key => key.includes('matrix')).reduce((acc, key) => {
+                            acc[key] = sessionStorage.getItem(key);
+                            return acc;
+                        }, {}),
+                        'Current URL': window.location.href,
+                        'User Agent': navigator.userAgent
+                    };
+                    
+                    debugDiv.textContent = JSON.stringify(debugInfo, null, 2);
+                } catch (error) {
+                    debugDiv.textContent = 'Error reading storage: ' + error.message;
+                }
+            }
+        }
+
+        function clearStorage() {
+            if (confirm('Clear all chat data? This will start a fresh conversation.')) {
+                localStorage.removeItem('matrix-chat-session');
+                document.cookie = 'matrix-chat-user-id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                updateStatus('Storage cleared successfully', 'success');
+                updateTestProgress(0, 'Ready to test - Click the chat button to begin');
+                setTimeout(() => location.reload(), 1000);
+            }
+        }
+
+        function refreshConfig() {
+            fetch('http://localhost:3001/api/config')
+                .then(response => response.json())
+                .then(config => {
+                    updateStatus(`Config loaded: ${config.widget.title} connected to ${config.matrix.homeserver}`, 'success');
+                })
+                .catch(error => {
+                    updateStatus(`Config error: ${error.message}`, 'error');
+                });
+        }
+
+        // Monitor chat widget events if available
+        if (window.MatrixChatWidget) {
+            // Widget is already loaded
+            monitorWidget();
+        } else {
+            // Wait for widget to load
+            window.addEventListener('load', () => {
+                setTimeout(monitorWidget, 1000);
+            });
+        }
+
+        function monitorWidget() {
+            // Try to detect when chat is opened/closed
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.type === 'childList') {
+                        const chatModal = document.querySelector('[class*="modal"]');
+                        if (chatModal && chatModal.style.display !== 'none') {
+                            if (testStage === 0) {
+                                updateTestProgress(1, 'Chat opened - Fill form and start conversation');
+                            }
+                        }
+                    }
+                });
+            });
+
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+
+            // Check for existing session on page load
+            setTimeout(() => {
+                const sessionData = localStorage.getItem('matrix-chat-session');
+                if (sessionData) {
+                    try {
+                        const session = JSON.parse(sessionData);
+                        if (session.roomId && session.conversationCount > 0) {
+                            updateTestProgress(3, `Detected existing session - Room: ${session.roomId.substring(0, 20)}...`);
+                        }
+                    } catch (error) {
+                        console.error('Error parsing session:', error);
+                    }
+                }
+            }, 500);
+        }
+
+        // Check URL parameters for test automation
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('stage') === 'refresh-test') {
+            updateStatus('Page refreshed - Testing history restoration...', 'info');
+            updateTestProgress(3, 'Page refreshed - Click chat to verify history restoration');
+        }
+
+        console.log('🧪 Persistence test page loaded - Check console for detailed logs');
+    </script>
+</body>
+</html>
