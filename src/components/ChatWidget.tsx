@@ -124,12 +124,25 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       const session = loadChatSession()
       let messages: ChatMessage[] = []
       
-      if (session.isReturningUser && roomId) {
+      console.log('🔍 HISTORY DEBUG - Session info:', {
+        isReturningUser: session.isReturningUser,
+        roomId: roomId,
+        sessionRoomId: session.roomId,
+        conversationCount: session.conversationCount,
+        conditionMet: session.isReturningUser && roomId,
+        shouldLoadHistory: session.isReturningUser && (roomId || session.roomId)
+      })
+      
+      // Load history if user is returning and we have a room (either new or from session)
+      if (session.isReturningUser && (roomId || session.roomId)) {
+        const historyRoomId = roomId || session.roomId!
         try {
           setChatState(prev => ({ ...prev, isLoadingHistory: true }))
           
+          console.log('🔍 HISTORY LOADING - Attempting to load from room:', historyRoomId)
+          
           // Try to load existing message history
-          const historyMessages = await clientRef.current.loadMessageHistory(roomId, 50)
+          const historyMessages = await clientRef.current.loadMessageHistory(historyRoomId, 50)
           
           if (historyMessages.length > 0) {
             messages = historyMessages
@@ -157,6 +170,19 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       // Increment conversation count for analytics
       incrementConversationCount()
       
+      // If we have an initial message and no history, add it to the UI
+      if (userForm.message && userForm.message.trim() && messages.length === 0) {
+        const initialMessage: ChatMessage = {
+          id: `initial-${Date.now()}`,
+          text: userForm.message,
+          sender: 'user',
+          timestamp: Date.now(),
+          status: 'sent'
+        }
+        messages = [initialMessage]
+        console.log('📝 Added initial message to UI:', userForm.message)
+      }
+
       setChatState(prev => ({
         ...prev,
         isLoading: false,

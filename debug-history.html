@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat History Debug</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .debug-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+        }
+        .debug-section {
+            margin: 15px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 3px solid #007bff;
+        }
+        pre {
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Chat History Loading Debug</h1>
+    
+    <div class="debug-panel">
+        <h3>Storage Analysis</h3>
+        <div class="debug-section">
+            <button onclick="checkStorage()">Check Current Storage</button>
+            <button onclick="clearStorage()">Clear All Storage</button>
+            <button onclick="createTestSession()">Create Test Session</button>
+        </div>
+        <pre id="storage-output">Click "Check Current Storage" to analyze saved data...</pre>
+    </div>
+
+    <div class="debug-panel">
+        <h3>Widget Test</h3>
+        <div class="debug-section">
+            <button onclick="loadWidget()">Load Chat Widget</button>
+            <button onclick="checkConsole()">Check Console Logs</button>
+        </div>
+        <div id="widget-status" class="info">Widget not loaded</div>
+        <pre id="console-output">Console output will appear here...</pre>
+    </div>
+
+    <div class="debug-panel">
+        <h3>Matrix Connection Test</h3>
+        <div class="debug-section">
+            <button onclick="testMatrixAPI()">Test Matrix API</button>
+            <button onclick="testRoomAccess()">Test Room Access</button>
+        </div>
+        <pre id="matrix-output">Click buttons to test Matrix connectivity...</pre>
+    </div>
+
+    <script>
+        let consoleMessages = [];
+        
+        // Capture console logs
+        const originalLog = console.log;
+        const originalWarn = console.warn;
+        const originalError = console.error;
+        
+        console.log = function(...args) {
+            consoleMessages.push(['LOG', ...args]);
+            originalLog.apply(console, args);
+            updateConsoleOutput();
+        };
+        
+        console.warn = function(...args) {
+            consoleMessages.push(['WARN', ...args]);
+            originalWarn.apply(console, args);
+            updateConsoleOutput();
+        };
+        
+        console.error = function(...args) {
+            consoleMessages.push(['ERROR', ...args]);
+            originalError.apply(console, args);
+            updateConsoleOutput();
+        };
+        
+        function updateConsoleOutput() {
+            const output = document.getElementById('console-output');
+            const last10 = consoleMessages.slice(-10);
+            output.textContent = last10.map(msg => {
+                const [level, ...args] = msg;
+                return `[${level}] ${args.map(arg => 
+                    typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+                ).join(' ')}`;
+            }).join('\n');
+        }
+        
+        function checkStorage() {
+            const output = document.getElementById('storage-output');
+            let result = 'STORAGE ANALYSIS:\n\n';
+            
+            // Check localStorage
+            result += '📦 localStorage:\n';
+            const sessionData = localStorage.getItem('matrix-chat-session');
+            if (sessionData) {
+                try {
+                    const session = JSON.parse(sessionData);
+                    result += JSON.stringify(session, null, 2) + '\n\n';
+                } catch (e) {
+                    result += 'ERROR: Invalid JSON in localStorage\n\n';
+                }
+            } else {
+                result += 'No session data found\n\n';
+            }
+            
+            // Check cookies
+            result += '🍪 Cookies:\n';
+            const cookies = document.cookie.split(';');
+            const chatCookie = cookies.find(c => c.trim().startsWith('matrix-chat-user-id='));
+            if (chatCookie) {
+                result += chatCookie.trim() + '\n\n';
+            } else {
+                result += 'No chat cookie found\n\n';
+            }
+            
+            // Check sessionStorage
+            result += '💾 sessionStorage:\n';
+            const sessionKeys = Object.keys(sessionStorage);
+            const chatKeys = sessionKeys.filter(key => key.includes('matrix') || key.includes('chat'));
+            if (chatKeys.length > 0) {
+                chatKeys.forEach(key => {
+                    result += `${key}: ${sessionStorage.getItem(key)}\n`;
+                });
+            } else {
+                result += 'No chat-related sessionStorage found\n';
+            }
+            
+            output.textContent = result;
+        }
+        
+        function clearStorage() {
+            localStorage.removeItem('matrix-chat-session');
+            document.cookie = 'matrix-chat-user-id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            
+            // Clear any sessionStorage
+            Object.keys(sessionStorage).forEach(key => {
+                if (key.includes('matrix') || key.includes('chat')) {
+                    sessionStorage.removeItem(key);
+                }
+            });
+            
+            document.getElementById('storage-output').textContent = '🧹 All storage cleared';
+            setTimeout(() => checkStorage(), 500);
+        }
+        
+        function createTestSession() {
+            const testSession = {
+                userId: 'matrix-chat-user-' + Date.now() + '-test123',
+                matrixUserId: '@guest_123456_abcdef:localhost',
+                roomId: '!testroom123:localhost',
+                userDetails: {
+                    name: 'Test User',
+                    email: 'test@example.com',
+                    message: 'This is a test message for history loading'
+                },
+                lastActivity: new Date().toISOString(),
+                conversationCount: 1,
+                isReturningUser: true,
+                guestUserId: '@guest_123456_abcdef:localhost',
+                guestAccessToken: 'test_token_123'
+            };
+            
+            localStorage.setItem('matrix-chat-session', JSON.stringify(testSession));
+            document.getElementById('storage-output').textContent = '✅ Test session created';
+            setTimeout(() => checkStorage(), 500);
+        }
+        
+        function loadWidget() {
+            const status = document.getElementById('widget-status');
+            status.textContent = 'Loading widget...';
+            status.className = 'info';
+            
+            // Clear previous console messages
+            consoleMessages = [];
+            
+            // Load widget
+            fetch('http://localhost:3001/api/config')
+                .then(response => response.json())
+                .then(config => {
+                    // Load CSS
+                    const cssLink = document.createElement('link');
+                    cssLink.rel = 'stylesheet';
+                    cssLink.href = 'http://localhost:3001/widget/style.css';
+                    document.head.appendChild(cssLink);
+                    
+                    // Load JS
+                    const script = document.createElement('script');
+                    script.src = 'http://localhost:3001/widget/matrix-chat-widget.iife.js';
+                    script.onload = function() {
+                        if (window.MatrixChatWidget) {
+                            window.MatrixChatWidget.init(config);
+                            status.textContent = '✅ Widget loaded successfully';
+                            status.className = 'success';
+                        } else {
+                            status.textContent = '❌ Widget object not found';
+                            status.className = 'error';
+                        }
+                    };
+                    script.onerror = function() {
+                        status.textContent = '❌ Failed to load widget script';
+                        status.className = 'error';
+                    };
+                    document.head.appendChild(script);
+                })
+                .catch(error => {
+                    status.textContent = '❌ Failed to load config: ' + error.message;
+                    status.className = 'error';
+                });
+        }
+        
+        function checkConsole() {
+            updateConsoleOutput();
+        }
+        
+        function testMatrixAPI() {
+            const output = document.getElementById('matrix-output');
+            output.textContent = 'Testing Matrix API connection...\n';
+            
+            fetch('http://localhost:3001/api/config')
+                .then(response => response.json())
+                .then(config => {
+                    const homeserver = config.matrix.homeserver;
+                    const accessToken = config.matrix.accessToken;
+                    
+                    // Test whoami endpoint
+                    return fetch(`${homeserver}/_matrix/client/r0/account/whoami`, {
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`
+                        }
+                    });
+                })
+                .then(response => response.json())
+                .then(data => {
+                    output.textContent += '✅ Matrix API connection successful\n';
+                    output.textContent += 'User ID: ' + data.user_id + '\n';
+                })
+                .catch(error => {
+                    output.textContent += '❌ Matrix API error: ' + error.message + '\n';
+                });
+        }
+        
+        function testRoomAccess() {
+            const output = document.getElementById('matrix-output');
+            const sessionData = localStorage.getItem('matrix-chat-session');
+            
+            if (!sessionData) {
+                output.textContent += '❌ No session data found to test room access\n';
+                return;
+            }
+            
+            try {
+                const session = JSON.parse(sessionData);
+                if (!session.roomId) {
+                    output.textContent += '❌ No room ID in session data\n';
+                    return;
+                }
+                
+                output.textContent += `Testing access to room: ${session.roomId}\n`;
+                
+                fetch('http://localhost:3001/api/config')
+                    .then(response => response.json())
+                    .then(config => {
+                        const homeserver = config.matrix.homeserver;
+                        const accessToken = session.guestAccessToken || config.matrix.accessToken;
+                        
+                        // Test room state
+                        return fetch(`${homeserver}/_matrix/client/r0/rooms/${session.roomId}/state`, {
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`
+                            }
+                        });
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            output.textContent += '✅ Room access successful\n';
+                            return response.json();
+                        } else {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                    })
+                    .then(data => {
+                        output.textContent += `Room has ${data.length} state events\n`;
+                    })
+                    .catch(error => {
+                        output.textContent += '❌ Room access error: ' + error.message + '\n';
+                    });
+                    
+            } catch (error) {
+                output.textContent += '❌ Session data parse error: ' + error.message + '\n';
+            }
+        }
+    </script>
+</body>
+</html>

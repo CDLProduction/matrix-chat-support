@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>getUserId Fix Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f8ff;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .test-step {
+            background: #f8f9fa;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+        }
+        .console {
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 500px;
+            overflow-y: auto;
+            margin: 15px 0;
+            white-space: pre-wrap;
+        }
+        button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 8px;
+            font-size: 14px;
+        }
+        button:hover { background: #218838; }
+        .error-highlight {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 getUserId Fix Test</h1>
+        
+        <div class="error-highlight">
+            <strong>Original Error:</strong> TypeError: this.getUserId is not a function<br>
+            <strong>Fix Applied:</strong> Changed <code>await this.getUserId()</code> to <code>this.client.getUserId()</code>
+        </div>
+
+        <div class="test-step">
+            <h3>Test Steps</h3>
+            <button onclick="clearStorage()">1. Clear Storage</button>
+            <button onclick="createSession()">2. Create Test Session</button>
+            <button onclick="loadWidget()">3. Load Widget</button>
+            <button onclick="triggerHistoryLoad()">4. Trigger History Load</button>
+        </div>
+
+        <div class="test-step">
+            <h3>Console Output</h3>
+            <button onclick="clearConsole()">Clear Console</button>
+            <div class="console" id="console-output">Test output will appear here...</div>
+        </div>
+    </div>
+
+    <script>
+        let consoleMessages = [];
+        
+        // Console capture
+        const originalConsole = { log: console.log, warn: console.warn, error: console.error };
+        
+        function captureConsole(level, args) {
+            const timestamp = new Date().toLocaleTimeString();
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            ).join(' ');
+            
+            consoleMessages.push(`[${timestamp}] ${level}: ${message}`);
+            updateConsoleDisplay();
+        }
+        
+        console.log = function(...args) { captureConsole('LOG', args); originalConsole.log.apply(console, args); };
+        console.warn = function(...args) { captureConsole('WARN', args); originalConsole.warn.apply(console, args); };  
+        console.error = function(...args) { captureConsole('ERROR', args); originalConsole.error.apply(console, args); };
+        
+        function updateConsoleDisplay() {
+            document.getElementById('console-output').textContent = consoleMessages.slice(-40).join('\n\n');
+        }
+        
+        function clearConsole() {
+            consoleMessages = [];
+            updateConsoleDisplay();
+        }
+        
+        function clearStorage() {
+            localStorage.clear();
+            console.log('🧹 Storage cleared');
+        }
+        
+        function createSession() {
+            const timestamp = Date.now();
+            const testSession = {
+                userId: `matrix-chat-user-${timestamp}-test`,
+                matrixUserId: `@guest_${timestamp}_test:localhost`,
+                roomId: `!testroom${timestamp}:localhost`,
+                userDetails: {
+                    name: 'Test User',
+                    email: 'test@example.com',
+                    message: 'Testing client message restoration'
+                },
+                lastActivity: new Date().toISOString(),
+                conversationCount: 1,
+                isReturningUser: true,
+                guestUserId: `@guest_${timestamp}_test:localhost`,
+                guestAccessToken: `test_token_${timestamp}`
+            };
+            
+            localStorage.setItem('matrix-chat-session', JSON.stringify(testSession));
+            console.log('✅ Test session created for returning user');
+            console.log('📊 Session details:', testSession);
+        }
+        
+        async function loadWidget() {
+            console.log('🔧 Loading widget with getUserId fix...');
+            
+            try {
+                const config = await fetch('http://localhost:3001/api/config').then(r => r.json());
+                console.log('📋 Widget config loaded');
+                
+                // Load CSS
+                const cssLink = document.createElement('link');
+                cssLink.rel = 'stylesheet';
+                cssLink.href = 'http://localhost:3001/widget/style.css';
+                document.head.appendChild(cssLink);
+                
+                // Load JS
+                const script = document.createElement('script');
+                script.src = 'http://localhost:3001/widget/matrix-chat-widget.iife.js';
+                script.onload = function() {
+                    if (window.MatrixChatWidget) {
+                        console.log('🚀 Widget loaded successfully');
+                        window.MatrixChatWidget.init(config);
+                        console.log('✅ Widget initialized - ready for history loading test');
+                    } else {
+                        console.error('❌ Widget object not found');
+                    }
+                };
+                script.onerror = function() {
+                    console.error('❌ Failed to load widget script');
+                };
+                document.head.appendChild(script);
+                
+            } catch (error) {
+                console.error('❌ Widget loading failed:', error);
+            }
+        }
+        
+        function triggerHistoryLoad() {
+            console.log('🎯 Triggering history load by opening chat...');
+            console.log('💡 Expected: No "getUserId is not a function" error');
+            console.log('💡 Expected: Debug logs showing message attribution logic');
+            
+            // The widget should now be loaded and ready
+            // Opening the chat should trigger the history loading
+            const chatButton = document.querySelector('[class*="chatButton"]');
+            if (chatButton) {
+                console.log('📱 Found chat button, clicking to open...');
+                chatButton.click();
+            } else {
+                console.log('⚠️ Chat button not found - widget might not be loaded yet');
+            }
+        }
+        
+        // Initialize
+        console.log('🔧 getUserId Fix Test initialized');
+        console.log('🎯 Testing fix for: TypeError: this.getUserId is not a function');
+    </script>
+</body>
+</html>

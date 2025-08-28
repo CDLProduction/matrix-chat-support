@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>History Flow Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .console-log {
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin: 10px 0;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        
+        .step-number {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 25px;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Complete History Flow Test</h1>
+    <p>This test will simulate the complete flow of creating a chat session and testing history loading.</p>
+
+    <div class="test-section">
+        <h3><span class="step-number">1</span>Storage Management</h3>
+        <button onclick="clearAllStorage()">Clear All Storage</button>
+        <button onclick="checkCurrentStorage()">Check Storage</button>
+        <button onclick="createTestSession()">Create Test Session</button>
+        <div id="storage-status" class="status info">Click "Check Storage" to see current state</div>
+    </div>
+
+    <div class="test-section">
+        <h3><span class="step-number">2</span>First Chat Session (Create History)</h3>
+        <button onclick="startFirstChat()" id="first-chat-btn">Start First Chat</button>
+        <button onclick="sendTestMessage()" id="send-msg-btn" disabled>Send Test Message</button>
+        <div id="first-chat-status" class="status info">Click "Start First Chat" to begin</div>
+    </div>
+
+    <div class="test-section">
+        <h3><span class="step-number">3</span>Page Refresh Simulation</h3>
+        <button onclick="simulateRefresh()" id="refresh-btn" disabled>Simulate Page Refresh</button>
+        <button onclick="testHistoryLoading()" id="history-btn" disabled>Test History Loading</button>
+        <div id="refresh-status" class="status info">Complete first chat to enable this step</div>
+    </div>
+
+    <div class="test-section">
+        <h3><span class="step-number">4</span>Console Output</h3>
+        <button onclick="clearConsoleLog()">Clear Console</button>
+        <button onclick="exportLog()">Export Log</button>
+        <div class="console-log" id="console-output">Console output will appear here...</div>
+    </div>
+
+    <script>
+        let consoleLog = [];
+        let chatSession = null;
+        let widgetLoaded = false;
+        
+        // Capture console output
+        const originalConsole = {
+            log: console.log,
+            warn: console.warn,
+            error: console.error
+        };
+        
+        function addToConsole(level, args) {
+            const timestamp = new Date().toLocaleTimeString();
+            const message = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            ).join(' ');
+            
+            consoleLog.push(`[${timestamp}] ${level}: ${message}`);
+            updateConsoleDisplay();
+        }
+        
+        console.log = function(...args) {
+            addToConsole('LOG', args);
+            originalConsole.log.apply(console, args);
+        };
+        
+        console.warn = function(...args) {
+            addToConsole('WARN', args);
+            originalConsole.warn.apply(console, args);
+        };
+        
+        console.error = function(...args) {
+            addToConsole('ERROR', args);
+            originalConsole.error.apply(console, args);
+        };
+        
+        function updateConsoleDisplay() {
+            const output = document.getElementById('console-output');
+            const last30 = consoleLog.slice(-30);
+            output.textContent = last30.join('\n\n');
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function clearConsoleLog() {
+            consoleLog = [];
+            updateConsoleDisplay();
+        }
+        
+        function exportLog() {
+            const logText = consoleLog.join('\n\n');
+            const blob = new Blob([logText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'chat-history-debug-log.txt';
+            a.click();
+        }
+        
+        function updateStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `status ${type}`;
+        }
+        
+        // Step 1: Storage Management
+        function clearAllStorage() {
+            localStorage.clear();
+            sessionStorage.clear();
+            document.cookie.split(";").forEach(function(c) { 
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+            });
+            console.log('🧹 All storage cleared');
+            updateStatus('storage-status', 'All storage cleared', 'success');
+        }
+        
+        function checkCurrentStorage() {
+            console.log('=== STORAGE CHECK ===');
+            
+            const sessionData = localStorage.getItem('matrix-chat-session');
+            if (sessionData) {
+                try {
+                    const session = JSON.parse(sessionData);
+                    console.log('📦 Found session:', session);
+                    updateStatus('storage-status', `Session found: ${session.userId.substring(0, 30)}...`, 'success');
+                    chatSession = session;
+                } catch (e) {
+                    console.error('❌ Invalid session data:', e);
+                    updateStatus('storage-status', 'Invalid session data found', 'error');
+                }
+            } else {
+                console.log('📦 No session data found');
+                updateStatus('storage-status', 'No session data found', 'info');
+            }
+        }
+        
+        function createTestSession() {
+            const timestamp = Date.now();
+            const testSession = {
+                userId: `matrix-chat-user-${timestamp}-test`,
+                matrixUserId: `@guest_${timestamp}_test:localhost`,
+                roomId: `!test${timestamp}:localhost`,
+                userDetails: {
+                    name: 'Test User',
+                    email: 'test@example.com',
+                    message: 'This is my test problem that needs support help'
+                },
+                lastActivity: new Date().toISOString(),
+                conversationCount: 1,
+                isReturningUser: true,
+                guestUserId: `@guest_${timestamp}_test:localhost`,
+                guestAccessToken: `test_token_${timestamp}`
+            };
+            
+            localStorage.setItem('matrix-chat-session', JSON.stringify(testSession));
+            console.log('✅ Test session created:', testSession);
+            updateStatus('storage-status', 'Test session created successfully', 'success');
+            chatSession = testSession;
+            
+            // Enable next step
+            document.getElementById('first-chat-btn').disabled = false;
+        }
+        
+        // Step 2: First Chat Session
+        async function startFirstChat() {
+            console.log('=== STARTING FIRST CHAT ===');
+            updateStatus('first-chat-status', 'Loading widget...', 'info');
+            
+            try {
+                // Load widget if not already loaded
+                if (!widgetLoaded) {
+                    await loadWidget();
+                }
+                
+                updateStatus('first-chat-status', 'Widget loaded, ready to send messages', 'success');
+                document.getElementById('send-msg-btn').disabled = false;
+                document.getElementById('refresh-btn').disabled = false;
+                
+            } catch (error) {
+                console.error('❌ Failed to start first chat:', error);
+                updateStatus('first-chat-status', 'Failed to load widget: ' + error.message, 'error');
+            }
+        }
+        
+        function sendTestMessage() {
+            console.log('📝 Simulating test message send...');
+            // This would normally trigger through the widget UI
+            // For now, just log that we would send a message
+            updateStatus('first-chat-status', 'Test message would be sent via widget UI', 'success');
+        }
+        
+        async function loadWidget() {
+            return new Promise((resolve, reject) => {
+                console.log('🔧 Loading widget configuration...');
+                
+                fetch('http://localhost:3001/api/config')
+                    .then(response => response.json())
+                    .then(config => {
+                        console.log('🔧 Widget config loaded:', config);
+                        
+                        // Load CSS
+                        const cssLink = document.createElement('link');
+                        cssLink.rel = 'stylesheet';
+                        cssLink.href = 'http://localhost:3001/widget/style.css';
+                        document.head.appendChild(cssLink);
+                        
+                        // Load JS
+                        const script = document.createElement('script');
+                        script.src = 'http://localhost:3001/widget/matrix-chat-widget.iife.js';
+                        script.onload = function() {
+                            console.log('📦 Widget script loaded');
+                            if (window.MatrixChatWidget) {
+                                console.log('🚀 Initializing widget...');
+                                window.MatrixChatWidget.init(config);
+                                widgetLoaded = true;
+                                resolve();
+                            } else {
+                                reject(new Error('Widget object not found'));
+                            }
+                        };
+                        script.onerror = function() {
+                            reject(new Error('Failed to load widget script'));
+                        };
+                        document.head.appendChild(script);
+                    })
+                    .catch(reject);
+            });
+        }
+        
+        // Step 3: Page Refresh Simulation
+        function simulateRefresh() {
+            console.log('=== SIMULATING PAGE REFRESH ===');
+            console.log('🔄 In a real scenario, this would reload the page...');
+            console.log('🔄 Instead, we\'ll clear widget state and reload it...');
+            
+            // Clear any widget state
+            widgetLoaded = false;
+            
+            // Remove existing widget elements
+            document.querySelectorAll('[class*="matrix-chat"]').forEach(el => el.remove());
+            
+            updateStatus('refresh-status', 'Page refresh simulated - widget cleared', 'success');
+            document.getElementById('history-btn').disabled = false;
+            
+            console.log('✅ Ready to test history loading');
+        }
+        
+        async function testHistoryLoading() {
+            console.log('=== TESTING HISTORY LOADING ===');
+            updateStatus('refresh-status', 'Testing history loading...', 'info');
+            
+            try {
+                // Check if we have session data
+                checkCurrentStorage();
+                
+                if (!chatSession) {
+                    throw new Error('No chat session found - cannot test history');
+                }
+                
+                console.log('🔍 Session data found, testing history loading...');
+                console.log('📊 Session details:', {
+                    isReturningUser: chatSession.isReturningUser,
+                    hasRoomId: !!chatSession.roomId,
+                    conversationCount: chatSession.conversationCount
+                });
+                
+                // Reload widget with debug logging
+                await loadWidget();
+                
+                updateStatus('refresh-status', 'History loading test completed - check console for debug output', 'success');
+                
+            } catch (error) {
+                console.error('❌ History loading test failed:', error);
+                updateStatus('refresh-status', 'History loading test failed: ' + error.message, 'error');
+            }
+        }
+        
+        // Initialize
+        console.log('🔍 History Flow Test initialized');
+        console.log('👆 Follow the numbered steps above to test chat history loading');
+    </script>
+</body>
+</html>

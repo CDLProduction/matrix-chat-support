@@ -13,6 +13,8 @@ export class MatrixChatClient {
   private initialSyncComplete: boolean = false
   private guestUserId: string | null = null
   private guestAccessToken: string | null = null
+  private isLoadingHistory: boolean = false
+  private connectionTimestamp: number = 0
 
   constructor(config: MatrixConfig) {
     this.config = config
@@ -175,11 +177,16 @@ export class MatrixChatClient {
 
       await this.client.startClient()
       
+      // Mark connection timestamp for timeline event filtering
+      this.connectionTimestamp = Date.now()
+      
       // Try to restore existing room if available
       const existingRoomId = getCurrentRoomId()
+      console.log('🔍 ROOM RESTORE DEBUG - existingRoomId from storage:', existingRoomId)
       if (existingRoomId) {
-        console.log('🔍 Checking existing room access:', existingRoomId)
+        console.log('🔍 Checking existing room access:', existingRoomId, 'as user:', userId)
         const hasAccess = await this.verifyRoomAccess(existingRoomId)
+        console.log('🔍 Room access result:', hasAccess)
         
         if (hasAccess) {
           this.currentRoomId = existingRoomId
@@ -189,6 +196,8 @@ export class MatrixChatClient {
           // Clear the invalid room ID from storage
           setRoomId('')
         }
+      } else {
+        console.log('🔍 No existing room ID found in storage')
       }
       
       this.notifyConnection(true)
@@ -216,6 +225,12 @@ export class MatrixChatClient {
 
     try {
       const session = loadChatSession()
+      console.log('🔍 CREATE/JOIN DEBUG - session:', {
+        isReturningUser: session.isReturningUser,
+        roomId: session.roomId,
+        conversationCount: session.conversationCount
+      })
+      console.log('🔍 CREATE/JOIN DEBUG - currentRoomId:', this.currentRoomId)
       
       // Check if user already has a room and it's accessible
       if (this.currentRoomId && await this.verifyRoomAccess(this.currentRoomId)) {
@@ -392,28 +407,70 @@ export class MatrixChatClient {
       return
     }
 
-    // Only process new messages after initial sync to avoid duplicating history
-    if (!this.initialSyncComplete) {
+    // For returning users, process messages during initial sync (this IS history restoration)
+    // For new users, skip messages during initial sync to avoid processing old room history
+    const session = loadChatSession()
+    const isReturningUser = session.isReturningUser
+    
+    if (!this.initialSyncComplete && !isReturningUser) {
       this.processedMessageIds.add(eventId)
-      console.log('⚠️ Skipping message during initial sync:', eventId)
+      console.log('⚠️ Skipping message during initial sync (new user):', eventId)
       return
+    } else if (!this.initialSyncComplete && isReturningUser) {
+      console.log('📚 Processing message during initial sync (returning user):', eventId)
     }
 
-    // For user's own messages, skip timeline events to prevent duplication with UI-added messages
+    // Enhanced logic for handling user's own messages
     const currentUserId = this.client?.getUserId()
     const eventSender = event.getSender()
     
-    if (eventSender === currentUserId) {
-      console.log('⚠️ Skipping own message from timeline to prevent duplication:', eventId)
+    // Get session data to identify all possible customer user IDs
+    const sessionGuestUserId = session.guestUserId || session.matrixUserId
+    
+    // Check if this is a customer message (from any guest user)
+    const isCustomerMessage = (
+      eventSender === currentUserId ||
+      eventSender === sessionGuestUserId ||
+      eventSender?.includes('guest_')
+    )
+    
+    console.log('🔍 TIMELINE EVENT DEBUG:', {
+      eventId: eventId.substring(0, 20) + '...',
+      eventSender: eventSender,
+      currentUserId: currentUserId,
+      sessionGuestUserId: sessionGuestUserId,
+      isCustomerMessage: isCustomerMessage,
+      isLoadingHistory: this.isLoadingHistory,
+      messageText: content.body.substring(0, 30) + '...'
+    })
+    
+    // Simple approach: For returning users, always include customer messages during initial connection
+    // This allows history restoration via timeline events
+    const messageAge = Date.now() - event.getTs()
+    const isRecentMessage = messageAge < (24 * 60 * 60 * 1000) // Less than 24 hours old
+    const isInitialConnection = (Date.now() - this.connectionTimestamp) < 30000 // First 30 seconds after connection
+    
+    // For customer messages: Include if it's a returning user connecting for the first time, or during explicit history loading
+    const shouldIncludeCustomerMessage = isCustomerMessage && (
+      this.isLoadingHistory || 
+      (isReturningUser && isInitialConnection && isRecentMessage)
+    )
+    
+    if (isCustomerMessage && !shouldIncludeCustomerMessage) {
+      console.log('⚠️ Skipping customer message from timeline (live session or old message):', eventId)
       this.processedMessageIds.add(eventId)
       return
+    } else if (shouldIncludeCustomerMessage) {
+      console.log('📚 Including customer message:', {
+        eventId: eventId.substring(0, 20) + '...',
+        isLoadingHistory: this.isLoadingHistory,
+        isReturningUser: isReturningUser,
+        isInitialConnection: isInitialConnection,
+        messageAgeHours: Math.round(messageAge / (60 * 60 * 1000))
+      })
     }
 
-    // Now with guest users, the logic is:
-    // - Messages from guest_* users = 'user' (customer messages)
-    // - Messages from other users (admin, support, etc.) = 'support' (support agent responses)
-    const isCustomerMessage = eventSender?.includes('guest_') || false
-    
+    // Create message with proper sender attribution
     const message: ChatMessage = {
       id: eventId,
       text: content.body,
@@ -422,7 +479,14 @@ export class MatrixChatClient {
       status: 'sent'
     }
 
-    console.log('📨 Processing support message:', { eventId, sender: eventSender, currentUser: currentUserId })
+    const messageType = isCustomerMessage ? 'customer' : 'support'
+    console.log(`📨 Processing ${messageType} message:`, { 
+      eventId, 
+      sender: eventSender, 
+      currentUser: currentUserId,
+      messageType: message.sender 
+    })
+    
     this.processedMessageIds.add(eventId)
     this.notifyMessage(message)
   }
@@ -510,16 +574,36 @@ export class MatrixChatClient {
    * Uses direct API call to work properly after page refresh
    */
   async loadMessageHistory(roomId: string, limit: number = 50): Promise<ChatMessage[]> {
+    console.log('🔍 HISTORY DEBUG - loadMessageHistory called:', {
+      roomId: roomId,
+      limit: limit,
+      clientConnected: !!this.client,
+      currentRoomId: this.currentRoomId
+    })
+    
     if (!this.client) {
       throw new Error('Matrix client not connected')
     }
 
     try {
-      const currentUserId = await this.getUserId()
+      // Set flag to indicate we're loading history (affects timeline event handling)
+      this.isLoadingHistory = true
+      console.log('🔄 Set isLoadingHistory = true for proper message restoration')
+      const currentUserId = this.client.getUserId()
 
       // Try to get messages from client cache first (if room is loaded)
       const room = this.client.getRoom(roomId)
       if (room && room.getLiveTimeline().getEvents().length > 0) {
+        // Get the guest user ID from session for proper customer message identification
+        const session = loadChatSession()
+        const sessionGuestUserId = session.guestUserId || session.matrixUserId
+        
+        console.log('🔍 CACHED MESSAGE DEBUG:', {
+          currentUserId: currentUserId,
+          sessionGuestUserId: sessionGuestUserId,
+          roomId: roomId
+        })
+        
         const timeline = room.getLiveTimeline()
         const events = timeline.getEvents()
         
@@ -530,20 +614,22 @@ export class MatrixChatClient {
             if (content.msgtype === 'm.text') {
               const eventId = event.getId() || `${event.getTs()}-${Math.random()}`
               const eventSender = event.getSender()
-              const isUserMessage = eventSender === currentUserId
+              
+              // Enhanced customer message detection (same logic as API fallback)
+              const isCustomerMessage = (
+                eventSender === currentUserId ||
+                eventSender === sessionGuestUserId ||
+                eventSender?.includes('guest_')
+              )
               
               console.log('📚 Loading cached message:', {
                 eventId: eventId.substring(0, 20) + '...',
                 sender: eventSender,
                 currentUserId: currentUserId,
-                isUserMessage,
+                sessionGuestUserId: sessionGuestUserId,
+                isCustomerMessage: isCustomerMessage,
                 text: content.body.substring(0, 50) + '...'
               })
-              
-              // With guest user architecture:
-              // Messages from guest_* users = 'user' (customer messages)
-              // Messages from other users (admin, support, etc.) = 'support' (support agent responses)
-              const isCustomerMessage = eventSender?.includes('guest_') || false
               
               const message: ChatMessage = {
                 id: eventId,
@@ -562,12 +648,21 @@ export class MatrixChatClient {
         
         if (messages.length > 0) {
           console.log(`📚 Loaded ${messages.length} messages from client cache`)
+          this.isLoadingHistory = false
+          console.log('🔄 Set isLoadingHistory = false - cached messages loaded')
           return messages
         }
       }
 
       // Fallback to API call (useful after page refresh when cache is empty)
       console.log('📡 Fetching message history via API for room:', roomId)
+      console.log('🔍 HISTORY API DEBUG:', {
+        roomId: roomId,
+        currentUserId: currentUserId,
+        isCurrentUserGuest: currentUserId.includes('guest_'),
+        guestAccessToken: this.guestAccessToken ? 'Available' : 'Not available',
+        supportAccessToken: this.config.accessToken ? 'Available' : 'Not available'
+      })
       
       // Use appropriate access token based on current user
       const isGuestUser = currentUserId.includes('guest_')
@@ -590,24 +685,40 @@ export class MatrixChatClient {
       const data = await response.json()
       const messages: ChatMessage[] = []
 
+      // Get the guest user ID from session to properly identify customer messages
+      const session = loadChatSession()
+      const sessionGuestUserId = session.guestUserId || session.matrixUserId
+      
+      console.log('🔍 MESSAGE ATTRIBUTION DEBUG:', {
+        currentUserId: currentUserId,
+        sessionGuestUserId: sessionGuestUserId,
+        totalMessages: data.chunk.length
+      })
+      
       // Process events in reverse order (API returns newest first with dir=b)
       for (const event of data.chunk.reverse()) {
         if (event.type === 'm.room.message' && event.content?.msgtype === 'm.text') {
           const eventId = event.event_id || `${event.origin_server_ts}-${Math.random()}`
-          const isUserMessage = event.sender === currentUserId
+          const eventSender = event.sender
           
-          console.log('📚 Loading message:', {
+          // Enhanced customer message detection:
+          // 1. Current user check (for live sessions)
+          // 2. Session guest user check (for restored sessions) 
+          // 3. Guest user pattern check (for fallback)
+          const isCustomerMessage = (
+            eventSender === currentUserId ||
+            eventSender === sessionGuestUserId ||
+            eventSender?.includes('guest_')
+          )
+          
+          console.log('📚 Processing message:', {
             eventId: eventId.substring(0, 20) + '...',
-            sender: event.sender,
+            sender: eventSender,
             currentUserId: currentUserId,
-            isUserMessage,
+            sessionGuestUserId: sessionGuestUserId,
+            isCustomerMessage: isCustomerMessage,
             text: event.content.body.substring(0, 50) + '...'
           })
-          
-          // With guest user architecture:
-          // Messages from guest_* users = 'user' (customer messages)
-          // Messages from other users (admin, support, etc.) = 'support' (support agent responses)
-          const isCustomerMessage = event.sender?.includes('guest_') || false
           
           const message: ChatMessage = {
             id: eventId,
@@ -616,6 +727,12 @@ export class MatrixChatClient {
             timestamp: event.origin_server_ts,
             status: 'sent'
           }
+          
+          console.log('📝 Created message object:', {
+            id: message.id.substring(0, 20) + '...',
+            sender: message.sender,
+            text: message.text.substring(0, 30) + '...'
+          })
           
           // Mark this message as processed to prevent timeline event duplication
           this.processedMessageIds.add(eventId)
@@ -628,6 +745,10 @@ export class MatrixChatClient {
     } catch (error) {
       console.error('Failed to load message history:', error)
       throw error
+    } finally {
+      // Always reset the flag when history loading is complete
+      this.isLoadingHistory = false
+      console.log('🔄 Set isLoadingHistory = false - history loading complete')
     }
   }
 
