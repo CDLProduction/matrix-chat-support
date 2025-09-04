@@ -1,6 +1,8 @@
 import { createClient, MatrixClient, Room, MatrixEvent, RoomEvent, ClientEvent } from 'matrix-js-sdk'
 import { MatrixConfig, ChatMessage, UserDetails } from '@/types'
-import { getCurrentRoomId, setRoomId, setMatrixUserId, loadChatSession, updateChatSession, getDepartmentRoomId, setDepartmentRoomId } from './chat-storage'
+import { getCurrentRoomId, setRoomId, setMatrixUserId, loadChatSession, updateChatSession, getDepartmentRoomId, getAllDepartmentRoomIds, clearDepartmentRoomId, setDepartmentRoomStatus, getDepartmentRoomInfo } from './chat-storage'
+import { getUserFriendlyErrorMessage, logError, isRetryableError, ErrorContext } from './error-handler'
+import { logRoomOperation, logDepartmentSwitch, createRoomSnapshot } from './room-operation-logger'
 
 export class MatrixChatClient {
   private client: MatrixClient | null = null
@@ -16,6 +18,8 @@ export class MatrixChatClient {
   private isLoadingHistory: boolean = false
   private connectionTimestamp: number = 0
   private hasLoggedFilterSuppression: boolean = false
+  private isReconnecting: boolean = false
+  private reconnectingToDepartment: string | null = null
 
   constructor(config: MatrixConfig) {
     this.config = config
@@ -178,6 +182,32 @@ export class MatrixChatClient {
 
   async connect(userDetails?: UserDetails, departmentId?: string): Promise<void> {
     try {
+      // Phase 4.1: Structured logging for connection operations
+      const snapshot = createRoomSnapshot(
+        this.currentRoomId,
+        getAllDepartmentRoomIds(),
+        departmentId,
+        this.isReconnecting,
+        !!this.client
+      )
+
+      logRoomOperation('info', 'Connection initiated', {
+        operation: 'connect',
+        departmentId,
+        userId: this.config.userId,
+        metadata: {
+          hasUserDetails: !!userDetails,
+          isReconnection: !!departmentId && !userDetails
+        }
+      }, snapshot)
+
+      // Set reconnection state if connecting to a specific department
+      if (departmentId && !userDetails) {
+        this.isReconnecting = true
+        this.reconnectingToDepartment = departmentId
+        console.log('🔄 [CONNECT] Setting reconnection state for department:', departmentId)
+      }
+      
       let userId: string
       let accessToken: string
       
@@ -226,13 +256,25 @@ export class MatrixChatClient {
       this.client.on(RoomEvent.Timeline, this.handleTimelineEvent.bind(this))
       this.client.on(ClientEvent.Sync, this.handleSync.bind(this))
       
-      // Auto-join rooms on invite (Matrix SDK best practice)
+      // Auto-join rooms on invite (Matrix SDK best practice) - but be department-aware
       this.client.on(RoomEvent.MyMembership, (room, membership, prevMembership) => {
         if (membership === 'invite') {
           console.log('🎟️ Auto-joining room on invitation:', room.roomId)
           this.client!.joinRoom(room.roomId).then(() => {
             console.log('✅ Auto-joined room:', room.roomId)
-            this.currentRoomId = room.roomId
+            
+            // CRITICAL FIX: Don't override currentRoomId during department reconnection
+            if (this.isReconnecting && this.reconnectingToDepartment) {
+              console.log('🔄 [AUTO_JOIN] Skipping room override during department reconnection:', {
+                new_room: room.roomId,
+                current_room: this.currentRoomId,
+                reconnecting_to_department: this.reconnectingToDepartment
+              })
+            } else {
+              // Safe to set as current room for new invitations
+              this.currentRoomId = room.roomId
+              console.log('✅ [AUTO_JOIN] Set as current room:', room.roomId)
+            }
           }).catch((error) => {
             console.error('❌ Failed to auto-join room:', error)
           })
@@ -247,27 +289,36 @@ export class MatrixChatClient {
       // For department switches, restore the specific department's room
       if (departmentId) {
         const departmentRoomId = getDepartmentRoomId(departmentId)
+        console.log('🔄 [CONNECT] Department room restoration:', {
+          department_id: departmentId,
+          stored_room_id: departmentRoomId,
+          user: userId
+        })
+        
         if (departmentRoomId) {
-          console.log('🏢 Restoring department-specific room:', departmentId, departmentRoomId)
-          const hasAccess = await this.verifyRoomAccess(departmentRoomId)
+          console.log('🔄 [CONNECT] Attempting to restore department room with re-invitation support')
+          const hasAccess = await this.ensureRoomAccess(departmentRoomId, departmentId)
           if (hasAccess) {
             this.currentRoomId = departmentRoomId
-            console.log('✅ Successfully restored department room:', departmentRoomId)
+            console.log('✅ [CONNECT] Room restored for department (with re-invitation support):', {
+              department_id: departmentId,
+              room_id: this.currentRoomId,
+              user: userId
+            })
           } else {
-            console.log('❌ Lost access to department room:', departmentRoomId)
-            setDepartmentRoomId(departmentId, '') // Clear invalid room
+            console.log('❌ [CONNECT] Failed to restore access to department room:', departmentRoomId)
+            console.log('🆕 [CONNECT] Will create new room for department:', departmentId)
+            setDepartmentRoomStatus(departmentId, departmentRoomId, 'invalid', 'access_lost') // Mark as invalid
           }
         } else {
-          console.log('🆕 No existing room for department:', departmentId)
+          console.log('🆕 [CONNECT] No existing room for department:', departmentId)
         }
       } else {
         // Legacy/initial connection - try to restore any existing room
         const existingRoomId = getCurrentRoomId()
-        console.log('🔍 ROOM RESTORE DEBUG - existingRoomId from storage:', existingRoomId)
         if (existingRoomId) {
-          console.log('🔍 Checking existing room access:', existingRoomId, 'as user:', userId)
+          console.log('🔍 [CONNECT] Checking existing room:', existingRoomId, 'for user:', userId)
           const hasAccess = await this.verifyRoomAccess(existingRoomId)
-          console.log('🔍 Room access result:', hasAccess)
           
           if (hasAccess) {
             this.currentRoomId = existingRoomId
@@ -281,23 +332,105 @@ export class MatrixChatClient {
         }
       }
       
+      // Clear reconnection state after successful connection and room restoration
+      if (this.isReconnecting) {
+        console.log('✅ [CONNECT] Clearing reconnection state after successful department restoration:', {
+          department: this.reconnectingToDepartment,
+          final_room: this.currentRoomId
+        })
+        this.isReconnecting = false
+        this.reconnectingToDepartment = null
+      }
+      
+      // Phase 3.1: Validate room state after connection
+      if (departmentId) {
+        console.log('🔍 [CONNECT] Validating room state for department:', departmentId)
+        const isValid = await this.validateAndRecoverRoomState(departmentId)
+        if (!isValid) {
+          console.warn('⚠️ [CONNECT] Room state validation failed, may need re-invitation')
+        }
+      }
+      
+      // Phase 4.1: Log successful connection
+      const finalSnapshot = createRoomSnapshot(
+        this.currentRoomId,
+        getAllDepartmentRoomIds(),
+        departmentId,
+        this.isReconnecting,
+        !!this.client
+      )
+
+      logRoomOperation('info', 'Connection completed successfully', {
+        operation: 'connect',
+        departmentId,
+        roomId: this.currentRoomId || undefined,
+        userId: userId,
+        metadata: {
+          finalRoomId: this.currentRoomId,
+          wasReconnecting: this.isReconnecting
+        }
+      }, finalSnapshot)
+      
       this.notifyConnection(true)
     } catch (error) {
-      this.notifyError(error as Error)
+      // Phase 3.2: Context-aware error handling for connection
+      const context: ErrorContext = {
+        action: departmentId ? 'reconnection' : 'connection',
+        originalError: error as Error,
+        department: departmentId ? { id: departmentId, name: departmentId } as any : undefined
+      }
+      
+      console.error('❌ [CONNECT] Connection failed:', {
+        departmentId,
+        error: error,
+        isReconnecting: this.isReconnecting,
+        retryable: isRetryableError(error as Error)
+      })
+      
+      this.notifyError(error as Error, context)
       throw error
     }
   }
 
-  async disconnect(): Promise<void> {
+  async disconnect(currentDepartmentId?: string): Promise<void> {
     if (this.client) {
-      console.log('🧹 Disconnecting Matrix client (preserving room memberships)...')
+      console.log('🧹 Disconnecting Matrix client...')
+      
+      // Phase 4.1: Log disconnect operation with Strategy 2 context
+      const preDisconnectSnapshot = createRoomSnapshot(
+        this.currentRoomId,
+        getAllDepartmentRoomIds(),
+        currentDepartmentId,
+        this.isReconnecting,
+        !!this.client
+      )
+
+      if (currentDepartmentId) {
+        logDepartmentSwitch('room_cleanup', null, currentDepartmentId, preDisconnectSnapshot, {
+          totalRoomsBeforeCleanup: Object.keys(getAllDepartmentRoomIds()).length
+        })
+      }
+
+      logRoomOperation('info', 'Disconnect initiated', {
+        operation: 'disconnect',
+        departmentId: currentDepartmentId,
+        metadata: {
+          strategy: currentDepartmentId ? 'Strategy2' : 'Legacy',
+          preserveDepartment: currentDepartmentId
+        }
+      }, preDisconnectSnapshot)
+      
+      // Strategy 2: Leave non-current department rooms before disconnecting
+      if (currentDepartmentId) {
+        console.log(`🔄 [DISCONNECT] Strategy 2: Cleaning up rooms (preserve: ${currentDepartmentId})`)
+        await this.leaveDepartmentRooms(currentDepartmentId)
+      } else {
+        // Legacy behavior: preserve all room memberships
+        console.log('💾 [DISCONNECT] Legacy mode: Preserving all room memberships')
+      }
       
       // Remove all event listeners to prevent bleeding events
       this.client.removeAllListeners()
-      
-      // For department switching, DON'T leave rooms - just disconnect the client
-      // This preserves room memberships so we can reconnect later
-      console.log('💾 Preserving room memberships for department switching')
       
       // Stop the client connection
       this.client.stopClient()
@@ -312,6 +445,10 @@ export class MatrixChatClient {
     this.initialSyncComplete = false
     this.isLoadingHistory = false
     this.connectionTimestamp = 0
+    
+    // Clear reconnection state
+    this.isReconnecting = false
+    this.reconnectingToDepartment = null
     
     // Clear guest credentials but preserve room data
     this.guestUserId = null
@@ -335,28 +472,40 @@ export class MatrixChatClient {
       })
       console.log('🔍 CREATE/JOIN DEBUG - currentRoomId:', this.currentRoomId)
       
-      // Always check for department-specific room first (for both new and returning users)
+      // Strategy 2.1: Enhanced department room connection logic with re-invitation
       if (departmentInfo) {
-        const departmentRoomId = getDepartmentRoomId(departmentInfo.id)
-        if (departmentRoomId) {
-          console.log('🏢 Found existing room for department:', departmentInfo.name, departmentRoomId)
+        const roomInfo = getDepartmentRoomInfo(departmentInfo.id)
+        
+        if (roomInfo && roomInfo.status === 'left') {
+          console.log('🔄 Strategy 2.1: Attempting re-invitation to existing room:', roomInfo.roomId)
           
-          // Verify access to this department's room
-          if (await this.verifyRoomAccess(departmentRoomId)) {
-            console.log('✅ Successfully accessing department room:', departmentRoomId)
-            this.currentRoomId = departmentRoomId
+          const reconnected = await this.rejoinExistingRoom(roomInfo.roomId, departmentInfo.id, departmentInfo.name)
+          if (reconnected) {
+            setDepartmentRoomStatus(departmentInfo.id, roomInfo.roomId, 'active', 'department_switch_return')
+            console.log('✅ Strategy 2.1: Successfully reconnected to existing department room')
+            return roomInfo.roomId
+          } else {
+            console.log('❌ Strategy 2.1: Re-invitation failed, will create new room')
+            setDepartmentRoomStatus(departmentInfo.id, roomInfo.roomId, 'invalid', 'rejoin_failed')
+          }
+        } else if (roomInfo && roomInfo.status === 'active') {
+          // Active room - verify access
+          if (await this.verifyRoomAccess(roomInfo.roomId)) {
+            console.log('✅ Successfully accessing active department room:', roomInfo.roomId)
+            this.currentRoomId = roomInfo.roomId
             
             // Send a message indicating user is returning to this department
             if (session.isReturningUser && session.conversationCount > 0) {
               await this.sendMessage(`I'm back to continue our conversation with ${departmentInfo.name}.`)
             }
             
-            return departmentRoomId
+            return roomInfo.roomId
           } else {
-            console.log('❌ Lost access to department room, will create new one:', departmentRoomId)
-            // Clear the invalid room ID from this department's storage
-            setDepartmentRoomId(departmentInfo.id, '')
+            console.log('❌ Lost access to department room, marking invalid:', roomInfo.roomId)
+            setDepartmentRoomStatus(departmentInfo.id, roomInfo.roomId, 'invalid', 'access_lost')
           }
+        } else if (roomInfo && roomInfo.status === 'invalid') {
+          console.log('⚠️ Department has invalid room, will create new one')
         } else {
           console.log('🆕 No existing room found for department:', departmentInfo.name)
         }
@@ -497,13 +646,48 @@ export class MatrixChatClient {
 
   async sendMessage(text: string): Promise<void> {
     if (!this.client || !this.currentRoomId) {
+      console.error('❌ [MESSAGE_SEND] No active room. Client:', !!this.client, 'Room:', this.currentRoomId)
       throw new Error('No active room to send message to')
     }
+    
+    // Phase 3.1: Validate room state before sending message
+    const isValid = this.validateCurrentRoomId()
+    if (!isValid) {
+      console.warn('⚠️ [MESSAGE_SEND] Room state validation failed, attempting recovery')
+      const recovered = await this.validateAndRecoverRoomState()
+      if (!recovered) {
+        throw new Error('Room state corrupted and recovery failed - cannot send message')
+      }
+    }
+    
+    const sender = this.client.getUserId()
+    console.log('📤 [MESSAGE_SEND] Sending message:', {
+      from: sender,
+      to_room: this.currentRoomId,
+      message_preview: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
+      timestamp: new Date().toISOString()
+    })
 
     try {
       await this.client.sendTextMessage(this.currentRoomId, text)
+      console.log('✅ [MESSAGE_SEND] Success to room:', this.currentRoomId)
     } catch (error) {
-      this.notifyError(error as Error)
+      // Phase 3.2: Context-aware error handling for message sending
+      const selectedDept = getCurrentRoomId() // Use room-based context for legacy support
+      const context: ErrorContext = {
+        action: 'message_send',
+        originalError: error as Error,
+        department: selectedDept ? { id: 'current', name: 'support' } as any : undefined
+      }
+      
+      console.error('❌ [MESSAGE_SEND] Failed:', {
+        error: error,
+        roomId: this.currentRoomId,
+        retryable: isRetryableError(error as Error),
+        userId: this.client?.getUserId()
+      })
+      
+      this.notifyError(error as Error, context)
       throw error
     }
   }
@@ -561,7 +745,7 @@ export class MatrixChatClient {
 
     // Skip if we've already processed this message (prevents duplicates from history loading)
     if (this.processedMessageIds.has(eventId)) {
-      console.log('⚠️ Skipping already processed message:', eventId)
+      // Don't log duplicate skip - too noisy
       return
     }
 
@@ -572,10 +756,10 @@ export class MatrixChatClient {
     
     if (!this.initialSyncComplete && !isReturningUser) {
       this.processedMessageIds.add(eventId)
-      console.log('⚠️ Skipping message during initial sync (new user):', eventId)
+      // Don't log initial sync skip - too noisy
       return
     } else if (!this.initialSyncComplete && isReturningUser) {
-      console.log('📚 Processing message during initial sync (returning user):', eventId)
+      // Don't log returning user processing - too noisy
     }
 
     // Enhanced logic for handling user's own messages
@@ -592,15 +776,16 @@ export class MatrixChatClient {
       eventSender?.includes('guest_')
     )
     
-    console.log('🔍 TIMELINE EVENT DEBUG:', {
-      eventId: eventId.substring(0, 20) + '...',
-      eventSender: eventSender,
-      currentUserId: currentUserId,
-      sessionGuestUserId: sessionGuestUserId,
-      isCustomerMessage: isCustomerMessage,
-      isLoadingHistory: this.isLoadingHistory,
-      messageText: content.body.substring(0, 30) + '...'
-    })
+    // Only log important timeline events
+    if (Date.now() - event.getTs() < 5000) { // Log only recent messages (< 5 seconds old)
+      console.log('📨 [TIMELINE] New message:', {
+        from: eventSender,
+        room: room?.roomId,
+        current_room: this.currentRoomId,
+        is_customer: isCustomerMessage,
+        preview: content.body.substring(0, 30) + '...'
+      })
+    }
     
     // Simple approach: For returning users, always include customer messages during initial connection
     // This allows history restoration via timeline events
@@ -662,7 +847,24 @@ export class MatrixChatClient {
     this.connectionCallbacks.forEach(callback => callback(connected))
   }
 
-  private notifyError(error: Error): void {
+  private notifyError(error: Error, context?: ErrorContext): void {
+    // Phase 3.2: Enhanced error handling with context
+    if (context) {
+      logError(context, { currentRoomId: this.currentRoomId, clientConnected: !!this.client })
+      
+      // Provide user-friendly error message
+      const userMessage = getUserFriendlyErrorMessage(context)
+      if (userMessage) {
+        // Create user-friendly error for callbacks
+        const friendlyError = new Error(userMessage)
+        ;(friendlyError as any).original = error
+        ;(friendlyError as any).context = context
+        this.errorCallbacks.forEach(callback => callback(friendlyError))
+        return
+      }
+    }
+    
+    // Fallback to original error
     this.errorCallbacks.forEach(callback => callback(error))
   }
 
@@ -917,30 +1119,47 @@ export class MatrixChatClient {
   /**
    * Joins an existing Matrix room (for reconnection purposes)
    */
-  async joinRoom(roomId: string): Promise<void> {
+  async joinRoom(roomId: string, departmentId?: string): Promise<void> {
     if (!this.client) {
       throw new Error('Matrix client not connected')
     }
 
-    console.log(`🚪 Attempting to join room: ${roomId}`)
+    console.log('🚪 [JOIN_ROOM] Attempting to join:', {
+      room_id: roomId,
+      department_id: departmentId || 'none',
+      current_room_before: this.currentRoomId,
+      user: this.client.getUserId()
+    })
     
     try {
       // First check if we're already in the room
       const room = this.client.getRoom(roomId)
       if (room && room.getMyMembership() === 'join') {
-        console.log(`✅ Already joined room: ${roomId}`)
+        console.log('✅ [JOIN_ROOM] Already joined:', roomId)
         this.currentRoomId = roomId
         return
       }
 
       // Join the room via Matrix API
       await this.client.joinRoom(roomId)
+      const oldRoomId = this.currentRoomId
       this.currentRoomId = roomId
       
-      // Update storage
-      setRoomId(roomId)
+      // Strategy 2.1: Update storage with 'active' status for new rooms
+      if (departmentId) {
+        setDepartmentRoomStatus(departmentId, roomId, 'active', 'room_created')
+      } else {
+        // Legacy behavior - update global room storage
+        setRoomId(roomId)
+      }
       
-      console.log(`✅ Successfully joined room: ${roomId}`)
+      console.log('✅ [JOIN_ROOM] Successfully joined:', {
+        room_id: roomId,
+        department_id: departmentId || 'none',
+        current_room_after: this.currentRoomId,
+        previous_room: oldRoomId,
+        user: this.client.getUserId()
+      })
       
     } catch (error: any) {
       console.error(`❌ Failed to join room ${roomId}:`, error)
@@ -960,6 +1179,584 @@ export class MatrixChatClient {
    */
   setCurrentRoomId(roomId: string): void {
     this.currentRoomId = roomId
+  }
+
+  /**
+   * Gets all department rooms that the user is currently in
+   * Used for Strategy 2 room cleanup during department switches
+   */
+  private async getAllDepartmentRooms(): Promise<string[]> {
+    if (!this.client) {
+      return []
+    }
+
+    const departmentRoomIds = getAllDepartmentRoomIds()
+    const joinedRooms: string[] = []
+
+    for (const [departmentId, roomId] of Object.entries(departmentRoomIds)) {
+      if (roomId) {
+        try {
+          const room = this.client.getRoom(roomId)
+          if (room && room.getMyMembership() === 'join') {
+            joinedRooms.push(roomId)
+            console.log(`🏠 Found joined department room: ${departmentId} -> ${roomId}`)
+          }
+        } catch (error) {
+          console.warn(`⚠️ Error checking room ${roomId} for department ${departmentId}:`, error)
+        }
+      }
+    }
+
+    console.log(`🔍 Found ${joinedRooms.length} joined department rooms`)
+    return joinedRooms
+  }
+
+  /**
+   * Leaves a specific Matrix room
+   * Used for Strategy 2 room cleanup
+   */
+  private async leaveRoom(roomId: string): Promise<void> {
+    if (!this.client) {
+      throw new Error('Matrix client not connected')
+    }
+
+    try {
+      console.log(`🚪 [LEAVE_ROOM] Attempting to leave room: ${roomId}`)
+      
+      // Check if we're actually in the room
+      const room = this.client.getRoom(roomId)
+      if (!room || room.getMyMembership() !== 'join') {
+        console.log(`ℹ️ [LEAVE_ROOM] Not in room ${roomId}, skipping leave`)
+        return
+      }
+
+      // Leave the room
+      await this.client.leave(roomId)
+      console.log(`✅ [LEAVE_ROOM] Successfully left room: ${roomId}`)
+      
+    } catch (error: any) {
+      console.error(`❌ [LEAVE_ROOM] Failed to leave room ${roomId}:`, error)
+      
+      // Don't throw - we want to continue with other room operations
+      // Room leave failures shouldn't break department switching
+    }
+  }
+
+  /**
+   * Leaves all department rooms except the specified current one
+   * Core method for Strategy 2 implementation
+   */
+  private async leaveDepartmentRooms(excludeDepartmentId?: string): Promise<void> {
+    if (!this.client) {
+      console.log('ℹ️ [LEAVE_DEPARTMENTS] No client connected, skipping room cleanup')
+      return
+    }
+
+    try {
+      console.log(`🧹 [LEAVE_DEPARTMENTS] Starting room cleanup (exclude: ${excludeDepartmentId || 'none'})`)
+      
+      const allDepartmentRooms = getAllDepartmentRoomIds()
+      const leavePromises: Promise<void>[] = []
+
+      for (const [deptId, roomId] of Object.entries(allDepartmentRooms)) {
+        // Skip the current department room
+        if (deptId === excludeDepartmentId) {
+          console.log(`🔒 [LEAVE_DEPARTMENTS] Preserving current department room: ${deptId} -> ${roomId}`)
+          continue
+        }
+
+        if (roomId) {
+          console.log(`🚪 [LEAVE_DEPARTMENTS] Queuing leave for department: ${deptId} -> ${roomId}`)
+          
+          // Strategy 2.1: Leave room but preserve in storage with 'left' status
+          const leavePromise = this.leaveRoom(roomId).then(() => {
+            setDepartmentRoomStatus(deptId, roomId, 'left', 'department_switch')
+            console.log(`✅ [LEAVE_DEPARTMENTS] Strategy 2.1: Left department room (preserved for re-invitation): ${deptId}`)
+          }).catch((error) => {
+            // Phase 3.2: Context-aware error handling for department cleanup
+            const context: ErrorContext = {
+              action: 'department_switch_room_creation', // This is part of department switching
+              originalError: error as Error,
+              department: { id: deptId, name: deptId } as any
+            }
+            
+            logError(context, { 
+              operation: 'room_cleanup', 
+              excludedDepartment: excludeDepartmentId,
+              roomId: roomId 
+            })
+            
+            console.warn(`⚠️ [LEAVE_DEPARTMENTS] Failed to clean up department ${deptId}:`, error)
+            // Continue with other departments even if one fails
+          })
+          
+          leavePromises.push(leavePromise)
+        }
+      }
+
+      // Wait for all leave operations to complete (with individual error handling)
+      if (leavePromises.length > 0) {
+        console.log(`⏳ [LEAVE_DEPARTMENTS] Waiting for ${leavePromises.length} room leave operations...`)
+        await Promise.all(leavePromises)
+        console.log(`✅ [LEAVE_DEPARTMENTS] Completed room cleanup`)
+      } else {
+        console.log(`ℹ️ [LEAVE_DEPARTMENTS] No rooms to leave`)
+      }
+
+    } catch (error) {
+      // Phase 3.2: Context-aware error handling for Strategy 2 cleanup
+      const context: ErrorContext = {
+        action: 'department_switch_room_creation',
+        originalError: error as Error,
+        department: excludeDepartmentId ? { id: excludeDepartmentId, name: excludeDepartmentId } as any : undefined
+      }
+      
+      logError(context, { 
+        operation: 'strategy_2_cleanup', 
+        excludedDepartment: excludeDepartmentId,
+        totalRooms: Object.keys(getAllDepartmentRoomIds()).length
+      })
+      
+      console.error('❌ [LEAVE_DEPARTMENTS] Error during room cleanup:', {
+        error: error,
+        excludeDepartmentId,
+        retryable: isRetryableError(error as Error)
+      })
+      // Don't throw - room cleanup failures shouldn't break department switching
+    }
+  }
+
+  /**
+   * Handles department room access - checks if user needs re-invitation
+   * Returns true if user has access, false if re-invitation needed
+   * Used for Strategy 2 when returning to previously left departments
+   */
+  private async handleDepartmentRoomAccess(departmentId: string, roomId: string): Promise<boolean> {
+    if (!this.client) {
+      console.warn('🚫 [ROOM_ACCESS] No client connected')
+      return false
+    }
+
+    try {
+      console.log(`🔍 [ROOM_ACCESS] Checking access to ${departmentId} room: ${roomId}`)
+      
+      // First, verify if we still have access to the room
+      const hasAccess = await this.verifyRoomAccess(roomId)
+      
+      if (hasAccess) {
+        console.log(`✅ [ROOM_ACCESS] User has access to ${departmentId} room`)
+        return true
+      }
+      
+      // No access - need to request re-invitation
+      console.log(`❌ [ROOM_ACCESS] User lost access to ${departmentId} room, requesting re-invitation`)
+      const reinvited = await this.requestRoomReinvitation(roomId, departmentId, departmentId)
+      
+      return reinvited // Return whether re-invitation succeeded
+      
+    } catch (error) {
+      console.error(`❌ [ROOM_ACCESS] Error checking room access for ${departmentId}:`, error)
+      return false
+    }
+  }
+
+
+  /**
+   * Enhanced room access verification with re-invitation handling
+   * Returns true if user has access or successfully rejoined
+   * Used in department reconnection flow
+   */
+  private async ensureRoomAccess(roomId: string, departmentId: string): Promise<boolean> {
+    try {
+      console.log(`🔒 [ENSURE_ACCESS] Ensuring access to ${departmentId} room: ${roomId}`)
+      
+      // First, try direct access verification
+      const hasDirectAccess = await this.verifyRoomAccess(roomId)
+      if (hasDirectAccess) {
+        console.log(`✅ [ENSURE_ACCESS] Direct access confirmed for ${departmentId}`)
+        return true
+      }
+
+      // No direct access - attempt re-invitation
+      console.log(`🔄 [ENSURE_ACCESS] Attempting re-invitation for ${departmentId}`)
+      const reinvited = await this.requestRoomReinvitation(roomId, departmentId, departmentId)
+      if (!reinvited) {
+        console.warn(`⚠️ [ENSURE_ACCESS] Re-invitation failed for ${departmentId}`)
+        return false
+      }
+      
+      // Wait a moment for the invitation to be processed and auto-joined
+      console.log(`⏳ [ENSURE_ACCESS] Waiting for auto-join to complete...`)
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // Verify access after re-invitation
+      const hasAccessAfterReinvite = await this.verifyRoomAccess(roomId)
+      if (hasAccessAfterReinvite) {
+        console.log(`✅ [ENSURE_ACCESS] Successfully rejoined ${departmentId} room`)
+        return true
+      }
+      
+      console.warn(`⚠️ [ENSURE_ACCESS] Re-invitation failed for ${departmentId}, may need new room`)
+      return false
+      
+    } catch (error) {
+      console.error(`❌ [ENSURE_ACCESS] Error ensuring room access for ${departmentId}:`, error)
+      return false
+    }
+  }
+
+  /**
+   * Phase 3.1: Room ID Validation and Recovery
+   * Validates that currentRoomId matches expected department and recovers from corruption
+   */
+  
+  /**
+   * Validates that the current room ID matches the expected department
+   * This helps detect room state corruption that could interfere with Strategy 2
+   */
+  private validateCurrentRoomId(expectedDepartmentId?: string): boolean {
+    try {
+      // If no department specified, just check if we have a valid current room
+      if (!expectedDepartmentId) {
+        const isValid = !!this.currentRoomId && this.currentRoomId.startsWith('!')
+        console.log(`🔍 [VALIDATE] Room ID validation (no department): ${isValid ? 'VALID' : 'INVALID'}`, {
+          currentRoomId: this.currentRoomId,
+          hasValidFormat: isValid
+        })
+        return isValid
+      }
+
+      // Check if current room matches expected department room
+      const expectedRoomId = getDepartmentRoomId(expectedDepartmentId)
+      const currentMatches = this.currentRoomId === expectedRoomId
+      
+      // Additional validation: check if current room exists in storage at all
+      const allDepartmentRooms = getAllDepartmentRoomIds()
+      const currentRoomInStorage = Object.values(allDepartmentRooms).includes(this.currentRoomId || '')
+      
+      console.log(`🔍 [VALIDATE] Room ID validation for department ${expectedDepartmentId}:`, {
+        currentRoomId: this.currentRoomId,
+        expectedRoomId: expectedRoomId,
+        currentMatches: currentMatches,
+        currentRoomInStorage: currentRoomInStorage,
+        allDepartmentRooms: Object.keys(allDepartmentRooms).length
+      })
+
+      // Room is valid if:
+      // 1. Current room matches expected department room, OR
+      // 2. Current room is null/undefined (fresh start), OR  
+      // 3. Current room exists somewhere in department storage (valid room, maybe different dept)
+      const isValid = currentMatches || !this.currentRoomId || currentRoomInStorage
+
+      if (!isValid) {
+        console.warn(`⚠️ [VALIDATE] Room ID validation failed:`, {
+          issue: 'Current room ID not found in any department storage',
+          currentRoomId: this.currentRoomId,
+          expectedDepartmentId,
+          expectedRoomId,
+          suggestedAction: 'Room state recovery needed'
+        })
+      }
+
+      return isValid
+
+    } catch (error) {
+      console.error(`❌ [VALIDATE] Error during room ID validation:`, error)
+      return false
+    }
+  }
+
+  /**
+   * Recovers from room state corruption by cleaning up invalid state
+   * and restoring consistent room state for the specified department
+   */
+  private async recoverRoomState(departmentId: string): Promise<void> {
+    try {
+      console.log(`🏥 [RECOVER] Starting room state recovery for department: ${departmentId}`)
+
+      // Step 1: Clear corrupted current room state
+      const previousRoomId = this.currentRoomId
+      this.currentRoomId = null
+      console.log(`🧹 [RECOVER] Cleared corrupted current room:`, previousRoomId)
+
+      // Step 2: Get the expected room for this department
+      const expectedRoomId = getDepartmentRoomId(departmentId)
+      console.log(`🔍 [RECOVER] Expected room for ${departmentId}:`, expectedRoomId)
+
+      if (expectedRoomId) {
+        // Step 3: Verify access to the expected room
+        const hasAccess = await this.verifyRoomAccess(expectedRoomId)
+        
+        if (hasAccess) {
+          // Room exists and we have access - restore it
+          this.currentRoomId = expectedRoomId
+          console.log(`✅ [RECOVER] Successfully recovered room state:`, {
+            departmentId,
+            recoveredRoomId: expectedRoomId,
+            previousRoomId
+          })
+        } else {
+          // Room exists in storage but we lost access - try re-invitation
+          console.log(`🔄 [RECOVER] Lost access to room, attempting re-invitation...`)
+          const accessRestored = await this.ensureRoomAccess(expectedRoomId, departmentId)
+          
+          if (accessRestored) {
+            this.currentRoomId = expectedRoomId
+            console.log(`✅ [RECOVER] Room access restored via re-invitation`)
+          } else {
+            // Re-invitation failed - clear invalid room from storage
+            console.warn(`⚠️ [RECOVER] Re-invitation failed, clearing invalid room from storage`)
+            clearDepartmentRoomId(departmentId)
+            console.log(`🧹 [RECOVER] Cleared invalid room from storage, will create new room`)
+          }
+        }
+      } else {
+        // No room exists for this department - this is normal for new conversations
+        console.log(`ℹ️ [RECOVER] No existing room for ${departmentId}, ready for new room creation`)
+      }
+
+      // Step 4: Clean up any other corrupted room references
+      if (previousRoomId && previousRoomId !== this.currentRoomId) {
+        // Previous room was corrupted - run storage cleanup to remove invalid entries
+        const allRooms = getAllDepartmentRoomIds()
+        let foundCorruptedEntry = false
+        
+        for (const [deptId, roomId] of Object.entries(allRooms)) {
+          if (roomId === previousRoomId && deptId !== departmentId) {
+            console.log(`🧹 [RECOVER] Found corrupted room reference in ${deptId}, cleaning up...`)
+            clearDepartmentRoomId(deptId)
+            foundCorruptedEntry = true
+          }
+        }
+        
+        if (foundCorruptedEntry) {
+          console.log(`🧹 [RECOVER] Cleaned up corrupted room references`)
+        }
+      }
+
+      console.log(`✅ [RECOVER] Room state recovery completed for ${departmentId}:`, {
+        finalRoomId: this.currentRoomId,
+        recoverySuccessful: true
+      })
+
+    } catch (error) {
+      console.error(`❌ [RECOVER] Room state recovery failed for ${departmentId}:`, error)
+      
+      // Fallback: ensure we're in a clean state even if recovery fails
+      this.currentRoomId = null
+      console.log(`🆘 [RECOVER] Fallback: Cleared room state, will start fresh`)
+    }
+  }
+
+  /**
+   * Validates and recovers room state if needed
+   * This is a public method that can be called during critical operations
+   */
+  async validateAndRecoverRoomState(expectedDepartmentId?: string): Promise<boolean> {
+    try {
+      console.log(`🔍 [VALIDATE_RECOVER] Validating room state for department:`, expectedDepartmentId)
+
+      // First, validate current room state
+      const isValid = this.validateCurrentRoomId(expectedDepartmentId)
+      
+      if (isValid) {
+        console.log(`✅ [VALIDATE_RECOVER] Room state is valid, no recovery needed`)
+        return true
+      }
+
+      // Room state is invalid - attempt recovery if we have a department context
+      if (expectedDepartmentId) {
+        console.log(`🏥 [VALIDATE_RECOVER] Room state invalid, starting recovery...`)
+        await this.recoverRoomState(expectedDepartmentId)
+        
+        // Validate again after recovery
+        const isValidAfterRecovery = this.validateCurrentRoomId(expectedDepartmentId)
+        
+        if (isValidAfterRecovery) {
+          console.log(`✅ [VALIDATE_RECOVER] Room state successfully recovered`)
+          return true
+        } else {
+          console.warn(`⚠️ [VALIDATE_RECOVER] Room state recovery was unsuccessful`)
+          return false
+        }
+      } else {
+        console.warn(`⚠️ [VALIDATE_RECOVER] Cannot recover room state without department context`)
+        return false
+      }
+
+    } catch (error) {
+      console.error(`❌ [VALIDATE_RECOVER] Error during validation and recovery:`, error)
+      return false
+    }
+  }
+
+  /**
+   * Strategy 2.1: Attempts to rejoin an existing room that user previously left
+   * Used when user returns to a department they were previously active in
+   */
+  private async rejoinExistingRoom(roomId: string, departmentId: string, departmentName: string): Promise<boolean> {
+    if (!this.client) {
+      console.warn('🚫 [REJOIN] No client connected')
+      return false
+    }
+
+    try {
+      console.log(`🔄 [REJOIN] Attempting to rejoin room for ${departmentName}: ${roomId}`)
+      
+      // Check if room still exists and is accessible
+      const roomExists = await this.verifyRoomExists(roomId)
+      if (!roomExists) {
+        console.log(`❌ [REJOIN] Room no longer exists: ${roomId}`)
+        return false
+      }
+      
+      // Try to get the room from the client
+      const room = this.client.getRoom(roomId)
+      if (!room) {
+        console.log(`❌ [REJOIN] Room not found in client: ${roomId}`)
+        return false
+      }
+      
+      // Check current membership status
+      const currentUserId = this.client.getUserId()
+      if (!currentUserId) {
+        console.log('❌ [REJOIN] Could not get current user ID')
+        return false
+      }
+      
+      const membership = room.getMyMembership()
+      console.log(`🔍 [REJOIN] Current membership status: ${membership}`)
+      
+      if (membership === 'join') {
+        // Already in the room
+        console.log('✅ [REJOIN] Already joined to room')
+        this.currentRoomId = roomId
+        await this.sendMessage(`I'm back to continue our conversation with ${departmentName}.`)
+        return true
+      } else if (membership === 'invite') {
+        // We have an invitation, accept it
+        console.log('📨 [REJOIN] Accepting room invitation')
+        await this.client.joinRoom(roomId)
+        this.currentRoomId = roomId
+        await this.sendMessage(`I'm back to continue our conversation with ${departmentName}.`)
+        return true
+      } else {
+        // Need to request re-invitation via bot
+        console.log('🤖 [REJOIN] Requesting re-invitation from bot')
+        return await this.requestRoomReinvitation(roomId, departmentId, departmentName)
+      }
+      
+    } catch (error) {
+      console.error('❌ [REJOIN] Error during rejoin attempt:', {
+        roomId,
+        departmentId,
+        error: (error as Error).message
+      })
+      
+      // Log structured error
+      logRoomOperation('error', 'rejoin_existing_room', {
+        roomId,
+        departmentId,
+        error: (error as Error).message,
+        retryable: isRetryableError(error as Error)
+      })
+      
+      return false
+    }
+  }
+  
+  /**
+   * Strategy 2.1: Requests re-invitation to a room via the bot user
+   */
+  private async requestRoomReinvitation(roomId: string, departmentId: string, departmentName: string): Promise<boolean> {
+    try {
+      console.log(`📨 [REINVITE] Requesting re-invitation from bot for room: ${roomId}`)
+      
+      // Check if bot is configured
+      if (!this.config.accessToken || !this.config.botUserId) {
+        console.log('❌ [REINVITE] Bot configuration not available')
+        return false
+      }
+      
+      const currentUserId = this.client?.getUserId()
+      if (!currentUserId) {
+        console.log('❌ [REINVITE] Could not get current user ID')
+        return false
+      }
+      
+      // Make API call to invite user back to the room using bot credentials
+      const inviteUrl = `${this.config.homeserver}/_matrix/client/r0/rooms/${encodeURIComponent(roomId)}/invite`
+      
+      const inviteResponse = await fetch(inviteUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.config.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          user_id: currentUserId
+        })
+      })
+      
+      if (!inviteResponse.ok) {
+        const errorData = await inviteResponse.json()
+        console.log('❌ [REINVITE] Bot invitation failed:', errorData)
+        return false
+      }
+      
+      console.log('📨 [REINVITE] Bot sent invitation, attempting to join')
+      
+      // Wait a moment for the invitation to arrive
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      // Try to join the room
+      await this.client!.joinRoom(roomId)
+      this.currentRoomId = roomId
+      
+      console.log('✅ [REINVITE] Successfully rejoined room via bot invitation')
+      
+      // Send welcome back message
+      await this.sendMessage(`I'm back to continue our conversation with ${departmentName}.`)
+      
+      return true
+      
+    } catch (error) {
+      console.error('❌ [REINVITE] Error during re-invitation process:', {
+        roomId,
+        departmentId,
+        error: (error as Error).message
+      })
+      
+      return false
+    }
+  }
+  
+  /**
+   * Strategy 2.1: Verifies if a room still exists on the server
+   */
+  private async verifyRoomExists(roomId: string): Promise<boolean> {
+    try {
+      if (!this.client) {
+        return false
+      }
+      
+      // Try to get room state to verify existence
+      const stateUrl = `${this.config.homeserver}/_matrix/client/r0/rooms/${encodeURIComponent(roomId)}/state`
+      
+      const response = await fetch(stateUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.config.accessToken}`
+        }
+      })
+      
+      // Room exists if we can get state (even if we can't access it)
+      return response.status !== 404
+      
+    } catch (error) {
+      console.warn('❌ [VERIFY_ROOM] Could not verify room existence:', roomId, error)
+      return false
+    }
   }
 
   /**

@@ -208,12 +208,12 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       // Get the department-specific room ID
       const departmentRoomId = getDepartmentRoomId(department.id)
       
-      console.log('🔄 Reconnecting to Matrix with stored session...', {
-        hasGuestToken: !!session.guestAccessToken,
-        hasGuestUserId: !!session.guestUserId,
-        departmentRoomId: departmentRoomId,
-        departmentName: department.name,
-        departmentId: department.id
+      console.log('🔄 [RECONNECT] Attempting reconnection:', {
+        department_id: department.id,
+        department_name: department.name,
+        department_room_id: departmentRoomId,
+        has_guest_token: !!session.guestAccessToken,
+        guest_user: session.guestUserId || 'none'
       })
       
       // For reconnection, use the guest credentials stored in session
@@ -237,11 +237,27 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       await client.connect(session.userDetails, department.id)
       clientRef.current = client
       
+      // Set up message handlers for this department's client
+      client.onMessage((message) => {
+        setChatState(prev => ({
+          ...prev,
+          messages: [...prev.messages, message]
+        }))
+        onMessage?.(message)
+      })
+      
+      client.onConnection((connected) => {
+        setChatState(prev => ({ ...prev, isConnected: connected }))
+      })
+      
       // Try to rejoin the department-specific room
       if (departmentRoomId) {
-        console.log('🔄 Rejoining department room:', departmentRoomId)
+        console.log('🗳 [RECONNECT] Rejoining room:', {
+          department_id: department.id,
+          room_id: departmentRoomId
+        })
         try {
-          await client.joinRoom(departmentRoomId)
+          await client.joinRoom(departmentRoomId, department.id)
           
           // Load message history
           setChatState(prev => ({ 
@@ -260,6 +276,9 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
             messages: messages || [],
             roomId: departmentRoomId
           }))
+          
+          // Ensure department room ID is stored
+          setDepartmentRoomId(department.id, departmentRoomId)
           
           console.log('✅ Reconnected successfully to existing room')
           onConnect?.({ 
@@ -438,10 +457,14 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       console.log(`💾 Saved room ${chatState.roomId} for department ${chatState.selectedDepartment.name}`)
     }
     
-    // Disconnect current Matrix client to clean up connections
+    // Disconnect current Matrix client to clean up connections using Strategy 2
     if (clientRef.current) {
-      console.log('🧹 Properly disconnecting Matrix client before switch...')
-      await clientRef.current.disconnect()
+      console.log('🧹 Disconnecting Matrix client with Strategy 2 room cleanup...', {
+        currentDepartment: chatState.selectedDepartment?.name,
+        currentDepartmentId: chatState.selectedDepartment?.id
+      })
+      // Pass current department ID to trigger Strategy 2 room cleanup
+      await clientRef.current.disconnect(chatState.selectedDepartment?.id)
       clientRef.current = null
     }
     
@@ -499,8 +522,13 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       
       // Always create a new client for department switching to avoid state conflicts
       if (clientRef.current) {
-        console.log('🧹 Disconnecting old Matrix client...')
-        await clientRef.current.disconnect()
+        console.log('🧹 Disconnecting old Matrix client with Strategy 2 cleanup...', {
+          newDepartment: department.name,
+          newDepartmentId: department.id,
+          currentDepartment: chatState.selectedDepartment?.name
+        })
+        // For department switching, pass the new department ID to preserve its room while cleaning others
+        await clientRef.current.disconnect(department.id)
         clientRef.current = null
       }
       
@@ -870,6 +898,7 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
 
     // Real Matrix integration
     if (!clientRef.current) {
+      console.error('❌ [WIDGET_SEND] No Matrix client available')
       setChatState(prev => ({
         ...prev,
         messages: prev.messages.map(msg =>
@@ -879,8 +908,17 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       return
     }
 
+    console.log('📧 [WIDGET_SEND] Preparing to send message:', {
+      department_id: chatState.selectedDepartment?.id,
+      department_name: chatState.selectedDepartment?.name,
+      room_id: chatState.roomId,
+      has_client: !!clientRef.current,
+      message_length: messageText.length
+    })
+
     try {
       await clientRef.current.sendMessage(messageText)
+      console.log('✅ [WIDGET_SEND] Message sent successfully')
       
       setChatState(prev => ({
         ...prev,

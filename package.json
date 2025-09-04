@@ -16,6 +16,10 @@
     "start:pm2": "pm2 start server/index.js --name matrix-chat-widget",
     "stop:pm2": "pm2 stop matrix-chat-widget",
     "restart:pm2": "pm2 restart matrix-chat-widget",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
     "test:health": "curl -s http://localhost:3001/health",
     "test:config": "curl -s http://localhost:3001/api/config",
     "setup": "./scripts/setup.sh"
@@ -29,6 +33,9 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/js-yaml": "^4.0.8",
@@ -37,13 +44,16 @@
     "@typescript-eslint/eslint-plugin": "^6.14.0",
     "@typescript-eslint/parser": "^6.14.0",
     "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/ui": "^3.2.4",
     "autoprefixer": "^10.4.16",
     "eslint": "^8.55.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
+    "jsdom": "^26.1.0",
     "postcss": "^8.4.32",
     "typescript": "^5.2.2",
-    "vite": "^5.0.8"
+    "vite": "^5.0.8",
+    "vitest": "^3.2.4"
   },
   "keywords": [
     "matrix",

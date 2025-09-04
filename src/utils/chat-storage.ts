@@ -40,6 +40,13 @@ export interface DepartmentHistory {
   roomId?: string;
   lastActivity: string;
   conversationCount: number;
+  // Strategy 2.1: Smart Room Preservation - Enhanced room status tracking
+  roomStatus?: 'active' | 'left' | 'invalid';
+  membershipHistory?: Array<{
+    action: 'join' | 'leave' | 'invite';
+    timestamp: string;
+    reason?: string;
+  }>;
 }
 
 const STORAGE_KEY = 'matrix-chat-session';
@@ -429,6 +436,296 @@ export function clearDepartmentData(): void {
     roomId: undefined
   });
   console.log('🧹 Department data cleared - user can select new department');
+}
+
+/**
+ * Gets all department room IDs from storage (for Strategy 2 room cleanup)
+ */
+export function getAllDepartmentRoomIds(): Record<string, string> {
+  const session = loadChatSession();
+  const roomIds: Record<string, string> = {};
+  
+  if (session.departmentHistory) {
+    for (const dept of session.departmentHistory) {
+      if (dept.roomId) {
+        roomIds[dept.departmentId] = dept.roomId;
+      }
+    }
+  }
+  
+  console.log('🔍 Retrieved all department room IDs:', roomIds);
+  return roomIds;
+}
+
+/**
+ * Strategy 2.1: Sets room status for a specific department (replaces clearDepartmentRoomId)
+ */
+export function setDepartmentRoomStatus(
+  departmentId: string, 
+  roomId: string, 
+  status: 'active' | 'left' | 'invalid',
+  reason?: string
+): void {
+  const session = loadChatSession();
+  
+  if (!session.departmentHistory) {
+    session.departmentHistory = [];
+  }
+  
+  const existingHistoryIndex = session.departmentHistory.findIndex(h => h.departmentId === departmentId);
+  const timestamp = new Date().toISOString();
+  
+  if (existingHistoryIndex >= 0) {
+    const dept = session.departmentHistory[existingHistoryIndex];
+    dept.roomId = roomId;
+    dept.roomStatus = status;
+    dept.lastActivity = timestamp;
+    
+    // Add to membership history
+    if (!dept.membershipHistory) {
+      dept.membershipHistory = [];
+    }
+    
+    const action = status === 'active' ? 'join' : status === 'left' ? 'leave' : 'leave';
+    dept.membershipHistory.push({
+      action,
+      timestamp,
+      reason: reason || `status_change_to_${status}`
+    });
+    
+    // Keep membership history to reasonable size
+    if (dept.membershipHistory.length > 10) {
+      dept.membershipHistory = dept.membershipHistory.slice(-10);
+    }
+  } else {
+    // Create new department entry
+    session.departmentHistory.push({
+      departmentId,
+      roomId,
+      roomStatus: status,
+      lastActivity: timestamp,
+      conversationCount: 0,
+      membershipHistory: [{
+        action: status === 'active' ? 'join' : 'leave',
+        timestamp,
+        reason: reason || `initial_${status}`
+      }]
+    });
+  }
+  
+  // Update main roomId if this is the currently selected department
+  const updates: Partial<ChatSession> = {
+    departmentHistory: session.departmentHistory
+  };
+  
+  if (session.selectedDepartment?.id === departmentId && status === 'active') {
+    updates.roomId = roomId;
+  } else if (session.selectedDepartment?.id === departmentId && status !== 'active') {
+    updates.roomId = undefined;
+  }
+  
+  updateChatSession(updates);
+  
+  console.log('🏢 Department room status updated:', {
+    departmentId,
+    roomId,
+    status,
+    reason: reason || 'none'
+  });
+}
+
+/**
+ * Strategy 2.1: Gets room information including status for a specific department
+ */
+export function getDepartmentRoomInfo(departmentId: string): {
+  roomId: string;
+  status: 'active' | 'left' | 'invalid';
+  lastActivity: string;
+  membershipHistory?: Array<{action: string, timestamp: string, reason?: string}>;
+} | null {
+  const session = loadChatSession();
+  if (!session.departmentHistory) {
+    return null;
+  }
+  
+  const departmentHistory = session.departmentHistory.find(h => h.departmentId === departmentId);
+  if (!departmentHistory?.roomId) {
+    return null;
+  }
+  
+  return {
+    roomId: departmentHistory.roomId,
+    status: departmentHistory.roomStatus || 'active', // Default to active for backwards compatibility
+    lastActivity: departmentHistory.lastActivity,
+    membershipHistory: departmentHistory.membershipHistory
+  };
+}
+
+/**
+ * Strategy 2.1: Gets all department room information with status (enhanced version)
+ */
+export function getAllDepartmentRoomInfo(): Record<string, {
+  roomId: string;
+  status: 'active' | 'left' | 'invalid';
+  lastActivity: string;
+}> {
+  const session = loadChatSession();
+  const roomInfo: Record<string, {roomId: string, status: 'active' | 'left' | 'invalid', lastActivity: string}> = {};
+  
+  if (session.departmentHistory) {
+    for (const dept of session.departmentHistory) {
+      if (dept.roomId) {
+        roomInfo[dept.departmentId] = {
+          roomId: dept.roomId,
+          status: dept.roomStatus || 'active', // Default to active for backwards compatibility
+          lastActivity: dept.lastActivity
+        };
+      }
+    }
+  }
+  
+  console.log('🔍 Retrieved all department room info with status:', roomInfo);
+  return roomInfo;
+}
+
+/**
+ * Clears room ID for a specific department (for Strategy 2 room cleanup)
+ * @deprecated Use setDepartmentRoomStatus instead for Strategy 2.1
+ */
+export function clearDepartmentRoomId(departmentId: string): void {
+  const session = loadChatSession();
+  
+  if (!session.departmentHistory) {
+    return;
+  }
+  
+  const existingHistoryIndex = session.departmentHistory.findIndex(h => h.departmentId === departmentId);
+  if (existingHistoryIndex >= 0) {
+    session.departmentHistory[existingHistoryIndex].roomId = undefined;
+    session.departmentHistory[existingHistoryIndex].lastActivity = new Date().toISOString();
+    
+    // Also clear main roomId if this is the currently selected department
+    const updates: Partial<ChatSession> = {
+      departmentHistory: session.departmentHistory
+    };
+    
+    if (session.selectedDepartment?.id === departmentId) {
+      updates.roomId = undefined;
+    }
+    
+    updateChatSession(updates);
+    
+    console.log('🧹 Cleared room ID for department:', departmentId);
+  }
+}
+
+/**
+ * Strategy 2.1: Cleans up invalid/empty department room entries with enhanced status-aware logic
+ */
+export function cleanupInvalidDepartmentRooms(maxAgeMs?: number): void {
+  const session = loadChatSession();
+  
+  if (!session.departmentHistory) {
+    return;
+  }
+  
+  const initialCount = session.departmentHistory.length;
+  const now = Date.now();
+  const defaultMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+  const maxAge = maxAgeMs ?? defaultMaxAge;
+  
+  // Enhanced cleanup logic for Strategy 2.1
+  session.departmentHistory = session.departmentHistory.filter(dept => {
+    // Keep departments with valid IDs
+    if (!dept.departmentId) {
+      console.log('🧹 Removing department with no ID:', dept);
+      return false;
+    }
+    
+    // Keep departments with conversation history even if no room
+    if (dept.conversationCount > 0) {
+      return true;
+    }
+    
+    // Remove departments marked as invalid and old enough
+    if (dept.roomStatus === 'invalid') {
+      const lastActivity = new Date(dept.lastActivity).getTime();
+      const age = now - lastActivity;
+      if (age > maxAge) {
+        console.log(`🧹 Removing invalid department older than ${maxAge}ms:`, dept.departmentId);
+        return false;
+      }
+    }
+    
+    // Keep rooms that are active or left (for potential re-invitation)
+    if (dept.roomId && (dept.roomStatus === 'active' || dept.roomStatus === 'left')) {
+      return true;
+    }
+    
+    // Remove empty entries with no room ID and no conversation history
+    if (!dept.roomId && dept.conversationCount === 0) {
+      console.log('🧹 Removing empty department entry:', dept.departmentId);
+      return false;
+    }
+    
+    return true;
+  });
+  
+  const cleanedCount = initialCount - session.departmentHistory.length;
+  
+  if (cleanedCount > 0) {
+    updateChatSession({
+      departmentHistory: session.departmentHistory
+    });
+    
+    console.log(`🧹 Strategy 2.1: Cleaned up ${cleanedCount} invalid department room entries`);
+  }
+}
+
+/**
+ * Strategy 2.1: Validates and marks rooms that no longer exist on the server
+ */
+export function markInvalidRooms(invalidRoomIds: string[]): void {
+  const session = loadChatSession();
+  
+  if (!session.departmentHistory || invalidRoomIds.length === 0) {
+    return;
+  }
+  
+  let updatedCount = 0;
+  const timestamp = new Date().toISOString();
+  
+  session.departmentHistory.forEach(dept => {
+    if (dept.roomId && invalidRoomIds.includes(dept.roomId)) {
+      dept.roomStatus = 'invalid';
+      dept.lastActivity = timestamp;
+      
+      // Add to membership history
+      if (!dept.membershipHistory) {
+        dept.membershipHistory = [];
+      }
+      
+      dept.membershipHistory.push({
+        action: 'leave',
+        timestamp,
+        reason: 'room_invalid_server_verification'
+      });
+      
+      updatedCount++;
+      console.log('❌ Marked room as invalid:', {
+        departmentId: dept.departmentId,
+        roomId: dept.roomId
+      });
+    }
+  });
+  
+  if (updatedCount > 0) {
+    updateChatSession({
+      departmentHistory: session.departmentHistory
+    });
+    
+    console.log(`❌ Strategy 2.1: Marked ${updatedCount} rooms as invalid`);
+  }
 }
 
 /**

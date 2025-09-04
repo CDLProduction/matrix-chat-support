@@ -11,7 +11,15 @@
       "Bash(docker compose:*)",
       "Bash(docker inspect:*)",
       "Bash(docker exec:*)",
-      "Bash(./scripts/docker-setup.sh:*)"
+      "Bash(./scripts/docker-setup.sh:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(lsof:*)",
+      "Bash(netstat:*)",
+      "Bash(pkill:*)",
+      "Bash(fuser:*)"
     ],
     "deny": [],
     "ask": [],
