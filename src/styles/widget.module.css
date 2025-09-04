@@ -163,6 +163,59 @@
   letter-spacing: -0.01em;
 }
 
+/* Header Content Container */
+.headerContent {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+/* Department Info Section */
+.departmentInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.departmentName {
+  font-size: 14px;
+  opacity: 0.9;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Department Switch Button */
+.switchDepartmentBtn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+  letter-spacing: -0.01em;
+}
+
+.switchDepartmentBtn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.switchDepartmentBtn:active {
+  transform: translateY(0);
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .closeButton {
   background: none;
   border: none;
@@ -440,22 +493,23 @@
 
 .chatInput textarea {
   flex: 1;
-  padding: 16px 20px;
+  padding: 10px 16px;
   border: 2px solid #e2e8f0;
   border-radius: 20px;
-  font-size: 16px;
+  font-size: 15px;
   outline: none;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   background: white;
   font-family: inherit;
-  min-height: 48px;
+  min-height: 36px;
   max-height: 120px;
   resize: none;
   overflow-y: auto;
-  line-height: 1.5;
+  line-height: 1.3;
   color: #334155;
   box-sizing: border-box;
   font-weight: 500;
+  vertical-align: top;
   box-shadow: 
     0 1px 3px rgba(0, 0, 0, 0.05),
     0 0 0 1px rgba(0, 0, 0, 0.02);
@@ -472,9 +526,11 @@
 }
 
 .chatInput textarea::placeholder {
-  color: #94a3b8;
+  color: #9ca3af;
   font-weight: 400;
-  font-style: italic;
+  font-style: normal;
+  opacity: 1;
+  line-height: 1.3;
 }
 
 /* Custom scrollbar for chat input - Enhanced */
@@ -654,6 +710,21 @@
   
   .headerText p {
     font-size: 13px;
+  }
+
+  .departmentInfo {
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .departmentName {
+    font-size: 13px;
+  }
+
+  .switchDepartmentBtn {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 14px;
   }
   
   .userForm {

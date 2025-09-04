@@ -98,66 +98,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         )}
 
-        {/* Department context header with switch button */}
-        {selectedDepartment && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '12px 16px',
-            borderBottom: '1px solid #e2e8f0',
-            backgroundColor: '#fafafa'
-          }}>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '8px',
-              fontSize: '14px',
-              color: '#374151'
-            }}>
-              {selectedDepartment.icon && (
-                <span style={{ fontSize: '18px' }}>{selectedDepartment.icon}</span>
-              )}
-              <span><strong>{selectedDepartment.name}</strong></span>
-              {isConnected && (
-                <div style={{
-                  width: '8px',
-                  height: '8px',
-                  backgroundColor: '#10b981',
-                  borderRadius: '50%',
-                  marginLeft: '8px'
-                }} />
-              )}
-            </div>
-            
-            {onSwitchDepartment && (
-              <button
-                onClick={onSwitchDepartment}
-                style={{
-                  background: 'none',
-                  border: `1px solid ${selectedDepartment.color || '#d1d5db'}`,
-                  borderRadius: '6px',
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  color: selectedDepartment.color || '#6b7280',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = selectedDepartment.color ? `${selectedDepartment.color}15` : '#f3f4f6'
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                }}
-              >
-                <span>↗️</span>
-                <span>Switch</span>
-              </button>
-            )}
-          </div>
-        )}
         
         {/* Messages */}
         {messages.map((message) => (
@@ -188,7 +128,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           value={currentMessage}
           onChange={handleTextareaChange}
           onKeyDown={handleKeyDown}
-          placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+          placeholder="Type your message..."
           disabled={!isConnected}
           rows={1}
           style={{ 

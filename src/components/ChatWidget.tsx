@@ -86,12 +86,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
     
     const nextStep = hasUserDetails ? 'chat' : 'user-form'
     
-    console.log('🏢 Department selected:', {
-      department: department.name,
-      hasUserDetails: !!hasUserDetails,
-      hasPreviousRoom: !!departmentRoomId,
-      nextStep
-    })
     
     setChatState(prev => ({
       ...prev,
@@ -109,10 +103,8 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
     // If user has details and we're going to chat, attempt reconnection
     if (hasUserDetails && nextStep === 'chat') {
       if (departmentRoomId) {
-        console.log('🔄 Attempting reconnection to existing department room...')
         setTimeout(() => attemptReconnection(department, chatState.session!), 1000)
       } else {
-        console.log('🆕 Starting new conversation in this department - creating new room...')
         // For department switching: user has details but no room for this department
         // Start chat directly (will create new room with existing user details)
         setTimeout(() => {
@@ -164,15 +156,9 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
           selectedDepartment: validDepartment,
           currentStep: session.userDetails ? 'chat' : 'user-form'
         }))
-        console.log('🔄 Restored department selection:', validDepartment.name)
         
         // Attempt to reconnect if user has existing session with room
         if (session.userDetails && session.roomId) {
-          console.log('🔄 Attempting to reconnect to existing chat session...', {
-            department: validDepartment.name,
-            roomId: session.roomId,
-            hasUserDetails: !!session.userDetails
-          })
           setTimeout(() => attemptReconnection(validDepartment, session), 1000)
         }
       } else {
@@ -186,14 +172,9 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       }
     } else if (session.userDetails && session.roomId && !config.departments) {
       // Legacy mode reconnection - no departments
-      console.log('🔄 Attempting to reconnect to legacy chat session...', {
-        roomId: session.roomId,
-        hasUserDetails: !!session.userDetails
-      })
       setTimeout(() => attemptLegacyReconnection(session), 1000)
     }
     
-    console.log('🔄 Session initialized:', getSessionInfo())
   }, [])
 
   // Attempt to reconnect to existing chat session
@@ -208,13 +189,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       // Get the department-specific room ID
       const departmentRoomId = getDepartmentRoomId(department.id)
       
-      console.log('🔄 [RECONNECT] Attempting reconnection:', {
-        department_id: department.id,
-        department_name: department.name,
-        department_room_id: departmentRoomId,
-        has_guest_token: !!session.guestAccessToken,
-        guest_user: session.guestUserId || 'none'
-      })
       
       // For reconnection, use the guest credentials stored in session
       // This ensures we see the full conversation from the customer's perspective
@@ -225,11 +199,9 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
           access_token: session.guestAccessToken,
           user_id: session.guestUserId
         }
-        console.log('🔄 Using guest credentials for reconnection:', session.guestUserId)
       } else {
         // Fallback to bot credentials if no guest credentials available
         matrixConfig = department.matrix
-        console.log('⚠️ No guest credentials found, using bot credentials as fallback')
       }
       
       const client = new MatrixChatClient(matrixConfig)
@@ -280,7 +252,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
           // Ensure department room ID is stored
           setDepartmentRoomId(department.id, departmentRoomId)
           
-          console.log('✅ Reconnected successfully to existing room')
           onConnect?.({ 
             roomId: departmentRoomId, 
             isReconnection: true,
@@ -306,7 +277,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
           isLoading: false,
           matrixClient: client
         }))
-        console.log('✅ Matrix client reconnected (no room to rejoin)')
       }
       
     } catch (error: any) {
@@ -340,11 +310,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
         error: undefined 
       }))
       
-      console.log('🔄 Reconnecting to Matrix in legacy mode...', {
-        hasGuestToken: !!session.guestAccessToken,
-        hasGuestUserId: !!session.guestUserId,
-        roomId: session.roomId
-      })
       
       // For legacy reconnection, also use the guest credentials from session
       let matrixConfig: any
@@ -354,11 +319,9 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
           access_token: session.guestAccessToken,
           user_id: session.guestUserId
         }
-        console.log('🔄 Using guest credentials for legacy reconnection:', session.guestUserId)
       } else {
         // Fallback to bot credentials if no guest credentials available
         matrixConfig = config.matrix!
-        console.log('⚠️ No guest credentials found, using bot credentials as fallback')
       }
       
       const client = new MatrixChatClient(matrixConfig)
@@ -367,7 +330,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       
       // Try to rejoin the existing room
       if (session.roomId) {
-        console.log('🔄 Rejoining legacy room:', session.roomId)
         try {
           await client.joinRoom(session.roomId)
           
@@ -390,7 +352,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
             currentStep: 'chat' // Ensure we go to chat view
           }))
           
-          console.log('✅ Legacy mode reconnected successfully')
           onConnect?.({ 
             roomId: session.roomId, 
             isReconnection: true,
@@ -445,24 +406,14 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
 
   // Handle department switching - preserve current session and go back to department selection
   const handleSwitchDepartment = async () => {
-    console.log('🔄 Switching departments...', {
-      currentDepartment: chatState.selectedDepartment?.name,
-      currentRoomId: chatState.roomId,
-      messageCount: chatState.messages.length
-    })
     
     // Save current department's room ID before switching
     if (chatState.selectedDepartment && chatState.roomId) {
       setDepartmentRoomId(chatState.selectedDepartment.id, chatState.roomId)
-      console.log(`💾 Saved room ${chatState.roomId} for department ${chatState.selectedDepartment.name}`)
     }
     
     // Disconnect current Matrix client to clean up connections using Strategy 2
     if (clientRef.current) {
-      console.log('🧹 Disconnecting Matrix client with Strategy 2 room cleanup...', {
-        currentDepartment: chatState.selectedDepartment?.name,
-        currentDepartmentId: chatState.selectedDepartment?.id
-      })
       // Pass current department ID to trigger Strategy 2 room cleanup
       await clientRef.current.disconnect(chatState.selectedDepartment?.id)
       clientRef.current = null
@@ -483,17 +434,10 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       // userDetails: prev.userDetails (already preserved by not modifying it)
     }))
     
-    console.log('✅ Returned to department selection - previous conversations preserved')
   }
 
   // Helper function for department switching - starts chat with existing user details
   const handleStartChatForDepartmentSwitch = async (userDetails: UserDetails, department: any) => {
-    console.log('🔄 Starting department switch room creation:', {
-      userDetails: { name: userDetails.name, email: userDetails.email },
-      department: department?.name,
-      departmentId: department?.id,
-      chatStateDepartment: chatState.selectedDepartment?.name
-    })
     
     if (!userDetails.name.trim() || !userDetails.email.trim()) {
       console.error('❌ Invalid user details for department switch')
@@ -511,35 +455,20 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       // Use department-specific matrix config for department switching
       const effectiveMatrixConfig = department.matrix
       
-      console.log('🔍 DEPARTMENT SWITCH DEBUG:', {
-        departmentName: department.name,
-        departmentId: department.id,
-        homeserver: effectiveMatrixConfig?.homeserver,
-        botUserId: effectiveMatrixConfig?.bot_user_id,
-        accessTokenPreview: effectiveMatrixConfig?.access_token?.substring(0, 20) + '...',
-        fullConfig: effectiveMatrixConfig
-      })
       
       // Always create a new client for department switching to avoid state conflicts
       if (clientRef.current) {
-        console.log('🧹 Disconnecting old Matrix client with Strategy 2 cleanup...', {
-          newDepartment: department.name,
-          newDepartmentId: department.id,
-          currentDepartment: chatState.selectedDepartment?.name
-        })
         // For department switching, pass the new department ID to preserve its room while cleaning others
         await clientRef.current.disconnect(department.id)
         clientRef.current = null
       }
       
-      console.log('🔧 Creating new Matrix client for department:', department.name)
       clientRef.current = new MatrixChatClient(effectiveMatrixConfig)
       
       // Clear any old room state to prevent message cross-contamination
       clientRef.current.startFreshConversation()
       
       // IMPORTANT: Clear global room storage to prevent connecting to old department's room
-      console.log('🧹 Clearing global room storage to prevent department cross-contamination')
       setRoomId('') // Clear the global room ID so connect() doesn't restore wrong room
       
       clientRef.current.onMessage((message) => {
@@ -557,7 +486,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       setChatState(prev => ({ ...prev, matrixClient: clientRef.current! }))
 
       // Connect the client before creating room (with department-specific restoration)
-      console.log('⏳ Connecting Matrix client for department switch...')
       await clientRef.current.connect(userDetails, department.id /* departmentId for room restoration */)
 
       // Create new room for this department using the correct method
@@ -568,11 +496,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
         true // isDepartmentSwitch - always create new room for department switches
       )
 
-      console.log('✅ New department room created:', {
-        roomId,
-        department: department.name,
-        user: userDetails.name
-      })
 
       // Store room ID for the department
       setDepartmentRoomId(department.id, roomId)
@@ -694,14 +617,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       const session = loadChatSession()
       let messages: ChatMessage[] = []
       
-      console.log('🔍 HISTORY DEBUG - Session info:', {
-        isReturningUser: session.isReturningUser,
-        roomId: roomId,
-        sessionRoomId: session.roomId,
-        conversationCount: session.conversationCount,
-        conditionMet: session.isReturningUser && roomId,
-        shouldLoadHistory: session.isReturningUser && (roomId || session.roomId)
-      })
       
       // Load history if user is returning and we have a room (either new or from session)
       if (session.isReturningUser && (roomId || session.roomId)) {
@@ -709,32 +624,27 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
         try {
           setChatState(prev => ({ ...prev, isLoadingHistory: true }))
           
-          console.log('🔍 HISTORY LOADING - Attempting to load from room:', historyRoomId)
           
           // Try to load existing message history
           const historyMessages = await clientRef.current.loadMessageHistory(historyRoomId, 50)
           
           if (historyMessages.length > 0) {
             messages = historyMessages
-            console.log('📚 Loaded conversation history:', historyMessages.length, 'messages')
           } else {
             // No history found - messages will arrive via Matrix timeline events
             // Don't create fake messages, let the real Matrix messages populate the chat
             messages = []
-            console.log('📪 No existing history, starting fresh conversation')
           }
         } catch (error) {
           console.warn('Failed to load message history:', error)
           // Fall back to empty messages - Matrix will populate via timeline events
           messages = []
-          console.log('📪 History loading failed, starting fresh')
         } finally {
           setChatState(prev => ({ ...prev, isLoadingHistory: false }))
         }
       } else {
         // New user - let Matrix populate messages via timeline events
         messages = []
-        console.log('👤 New user conversation starting')
       }
 
       // Store room ID for the department (or legacy storage if no department)
@@ -755,7 +665,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
           status: 'sent'
         }
         messages = [initialMessage]
-        console.log('📝 Added initial message to UI:', userForm.message)
       }
 
       setChatState(prev => ({
@@ -918,7 +827,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
 
     try {
       await clientRef.current.sendMessage(messageText)
-      console.log('✅ [WIDGET_SEND] Message sent successfully')
       
       setChatState(prev => ({
         ...prev,
@@ -1003,19 +911,38 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       {chatState.isOpen && (
         <div className={styles.chatModal}>
           <header className={styles.modalHeader}>
-            <div className={styles.headerText}>
-              <h3>{config.widget.title || 'Support Chat'}</h3>
-              <p>{config.widget.subtitle || 'We\'re here to help!'}</p>
+            <div className={styles.headerContent}>
+              <div className={styles.headerText}>
+                <h3>{config.widget.title || 'Support Chat'}</h3>
+                {chatState.selectedDepartment && chatState.currentStep !== 'department-selection' ? (
+                  <div className={styles.departmentInfo}>
+                    <span className={styles.departmentName}>
+                      {chatState.selectedDepartment.icon} {chatState.selectedDepartment.name}
+                    </span>
+                    {config.departments && config.departments.length > 1 && (
+                      <button 
+                        className={styles.switchDepartmentBtn}
+                        onClick={handleSwitchDepartment}
+                        aria-label="Switch department"
+                      >
+                        Switch
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <p>{config.widget.subtitle || 'We\'re here to help!'}</p>
+                )}
+              </div>
+              <button 
+                className={styles.closeButton} 
+                onClick={handleCloseChat}
+                aria-label="Close chat"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                </svg>
+              </button>
             </div>
-            <button 
-              className={styles.closeButton} 
-              onClick={handleCloseChat}
-              aria-label="Close chat"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-              </svg>
-            </button>
           </header>
 
           <div className={styles.modalContent}>
@@ -1057,7 +984,6 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
                 isLoading={chatState.isLoading}
                 onFormChange={handleFormChange}
                 onSubmit={handleStartChat}
-                onDepartmentChange={config.departments ? handleDepartmentChange : undefined}
                 onSessionReset={handleSessionReset}
               />
             )}

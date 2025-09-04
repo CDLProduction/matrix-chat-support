@@ -12,7 +12,6 @@ interface UserDetailsFormProps {
   isLoading?: boolean
   onFormChange: (field: keyof UserDetails, value: string) => void
   onSubmit: (e: React.FormEvent) => void
-  onDepartmentChange?: () => void
   onSessionReset?: () => void
 }
 
@@ -25,7 +24,6 @@ const UserDetailsForm: React.FC<UserDetailsFormProps> = ({
   isLoading,
   onFormChange,
   onSubmit,
-  onDepartmentChange,
   onSessionReset
 }) => {
   const isFormValid = userForm.name.trim() && userForm.email.trim() && userForm.message?.trim()
@@ -33,42 +31,6 @@ const UserDetailsForm: React.FC<UserDetailsFormProps> = ({
   return (
     <form className={styles.userForm} onSubmit={onSubmit}>
       <div style={{ marginBottom: '8px' }}>
-        {selectedDepartment && (
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
-            marginBottom: '16px',
-            padding: '8px 12px',
-            backgroundColor: '#f8fafc',
-            borderRadius: '6px',
-            border: `1px solid ${selectedDepartment.color || '#e2e8f0'}`
-          }}>
-            {selectedDepartment.icon && (
-              <span style={{ fontSize: '16px' }}>{selectedDepartment.icon}</span>
-            )}
-            <span style={{ fontSize: '14px', fontWeight: '500' }}>
-              {selectedDepartment.name}
-            </span>
-            {onDepartmentChange && (
-              <button 
-                type="button"
-                onClick={onDepartmentChange}
-                style={{ 
-                  marginLeft: 'auto', 
-                  background: 'none', 
-                  border: 'none', 
-                  color: '#666', 
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  textDecoration: 'underline'
-                }}
-              >
-                Change
-              </button>
-            )}
-          </div>
-        )}
 
         <p style={{ margin: '0 0 16px 0', color: '#555', lineHeight: '1.4', fontSize: '14px' }}>
           {greeting || 'Hi! We\'d love to help. Please share your details and message to get started.'}

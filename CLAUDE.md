@@ -325,5 +325,35 @@ MIT License - See LICENSE file for details.
 - **Timeline-based history restoration** using Matrix initial sync
 - **Multi-layer user detection** with session storage persistence
 - **Smart room management** prevents "user already in room" errors
+- **Strategy 2.1 Room Preservation** - Enhanced department room management with re-invitation support
 - **Optimized builds** - 9.7MB bundle (3.5MB gzipped)
 - **Cross-browser compatibility** - Chrome, Firefox, Safari, Edge
+
+### Strategy 2.1 "Smart Room Preservation" ✅
+
+**Problem Solved:** Strategy 2 was creating new rooms when users returned to previously visited departments instead of reconnecting to existing rooms.
+
+**Key Features:**
+- **Enhanced Storage Format** - Room status tracking ('active', 'left', 'invalid') with membership history
+- **Memory Preservation** - Leaving rooms updates status to 'left' instead of clearing from storage
+- **Bot-Assisted Re-invitation** - Automatic re-invitation to previously left rooms via support bot
+- **Room State Recovery** - Comprehensive validation and recovery for corrupted room states
+- **Backwards Compatibility** - Legacy rooms without status default to 'active'
+
+**Implementation:**
+- `setDepartmentRoomStatus()` - Enhanced room status management
+- `getDepartmentRoomInfo()` - Retrieves room info with status
+- `rejoinExistingRoom()` - Smart room reconnection logic
+- `requestRoomReinvitation()` - Bot-mediated re-invitation process
+
+**Status Workflow:**
+1. **room_created** → **active** (user joins new room)
+2. **department_switch** → **left** (user switches departments, room preserved)
+3. **department_switch_return** → **active** (user returns, room reactivated)
+4. **access_lost/rejoin_failed** → **invalid** (room no longer accessible)
+
+**Benefits:**
+- Eliminates duplicate rooms when switching between departments
+- Preserves conversation history across department visits
+- Provides seamless user experience with "Welcome back" messaging
+- Reduces server load by reusing existing rooms

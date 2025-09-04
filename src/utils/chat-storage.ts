@@ -96,11 +96,6 @@ export function saveChatSession(session: ChatSession): void {
     // Save user ID to cookie as backup
     setCookie(COOKIE_NAME, session.userId, SESSION_DURATION_DAYS);
     
-    console.log('💾 Chat session saved:', {
-      userId: session.userId,
-      roomId: session.roomId,
-      isReturning: session.isReturningUser
-    });
   } catch (error) {
     console.warn('Failed to save chat session:', error);
   }
@@ -119,12 +114,6 @@ export function loadChatSession(): ChatSession {
       // Validate session data
       if (session.userId && isValidSession(session)) {
         session.isReturningUser = true;
-        console.log('🔄 Loaded existing chat session:', {
-          userId: session.userId,
-          roomId: session.roomId,
-          conversations: session.conversationCount,
-          lastActivity: session.lastActivity
-        });
         return session;
       }
     }
@@ -153,7 +142,6 @@ export function loadChatSession(): ChatSession {
     isReturningUser: false
   };
   
-  console.log('✨ Created new chat session:', newSession.userId);
   return newSession;
 }
 
@@ -179,7 +167,6 @@ export function clearChatSession(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
     setCookie(COOKIE_NAME, '', -1); // Delete cookie
-    console.log('🧹 Chat session cleared - starting fresh');
   } catch (error) {
     console.warn('Failed to clear chat session:', error);
   }
@@ -304,10 +291,6 @@ export function setSelectedDepartment(department: Department): void {
     departmentHistory: session.departmentHistory
   });
   
-  console.log('🏢 Department selected:', {
-    departmentId: department.id,
-    departmentName: department.name
-  });
 }
 
 /**
@@ -365,11 +348,6 @@ export function setDepartmentRoomId(departmentId: string, roomId: string): void 
   
   updateChatSession(updates);
   
-  console.log('🏢 Department room ID set:', {
-    departmentId,
-    roomId,
-    isCurrent: session.selectedDepartment?.id === departmentId
-  });
 }
 
 /**
@@ -407,10 +385,6 @@ export function incrementDepartmentConversationCount(departmentId?: string): voi
     departmentHistory: session.departmentHistory
   });
   
-  console.log('📊 Department conversation count incremented:', {
-    departmentId: targetDepartmentId,
-    totalConversations: session.conversationCount + 1
-  });
 }
 
 /**
@@ -435,7 +409,6 @@ export function clearDepartmentData(): void {
     departmentId: undefined,
     roomId: undefined
   });
-  console.log('🧹 Department data cleared - user can select new department');
 }
 
 /**
@@ -453,7 +426,6 @@ export function getAllDepartmentRoomIds(): Record<string, string> {
     }
   }
   
-  console.log('🔍 Retrieved all department room IDs:', roomIds);
   return roomIds;
 }
 
@@ -526,12 +498,6 @@ export function setDepartmentRoomStatus(
   
   updateChatSession(updates);
   
-  console.log('🏢 Department room status updated:', {
-    departmentId,
-    roomId,
-    status,
-    reason: reason || 'none'
-  });
 }
 
 /**
@@ -584,7 +550,6 @@ export function getAllDepartmentRoomInfo(): Record<string, {
     }
   }
   
-  console.log('🔍 Retrieved all department room info with status:', roomInfo);
   return roomInfo;
 }
 
@@ -615,7 +580,6 @@ export function clearDepartmentRoomId(departmentId: string): void {
     
     updateChatSession(updates);
     
-    console.log('🧹 Cleared room ID for department:', departmentId);
   }
 }
 
@@ -638,7 +602,6 @@ export function cleanupInvalidDepartmentRooms(maxAgeMs?: number): void {
   session.departmentHistory = session.departmentHistory.filter(dept => {
     // Keep departments with valid IDs
     if (!dept.departmentId) {
-      console.log('🧹 Removing department with no ID:', dept);
       return false;
     }
     
@@ -652,7 +615,6 @@ export function cleanupInvalidDepartmentRooms(maxAgeMs?: number): void {
       const lastActivity = new Date(dept.lastActivity).getTime();
       const age = now - lastActivity;
       if (age > maxAge) {
-        console.log(`🧹 Removing invalid department older than ${maxAge}ms:`, dept.departmentId);
         return false;
       }
     }
@@ -664,7 +626,6 @@ export function cleanupInvalidDepartmentRooms(maxAgeMs?: number): void {
     
     // Remove empty entries with no room ID and no conversation history
     if (!dept.roomId && dept.conversationCount === 0) {
-      console.log('🧹 Removing empty department entry:', dept.departmentId);
       return false;
     }
     
@@ -678,7 +639,6 @@ export function cleanupInvalidDepartmentRooms(maxAgeMs?: number): void {
       departmentHistory: session.departmentHistory
     });
     
-    console.log(`🧹 Strategy 2.1: Cleaned up ${cleanedCount} invalid department room entries`);
   }
 }
 
@@ -712,10 +672,6 @@ export function markInvalidRooms(invalidRoomIds: string[]): void {
       });
       
       updatedCount++;
-      console.log('❌ Marked room as invalid:', {
-        departmentId: dept.departmentId,
-        roomId: dept.roomId
-      });
     }
   });
   
@@ -724,7 +680,6 @@ export function markInvalidRooms(invalidRoomIds: string[]): void {
       departmentHistory: session.departmentHistory
     });
     
-    console.log(`❌ Strategy 2.1: Marked ${updatedCount} rooms as invalid`);
   }
 }
 
