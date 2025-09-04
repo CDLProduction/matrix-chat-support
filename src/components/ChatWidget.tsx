@@ -205,10 +205,15 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
         error: undefined 
       }))
       
+      // Get the department-specific room ID
+      const departmentRoomId = getDepartmentRoomId(department.id)
+      
       console.log('🔄 Reconnecting to Matrix with stored session...', {
         hasGuestToken: !!session.guestAccessToken,
         hasGuestUserId: !!session.guestUserId,
-        roomId: session.roomId
+        departmentRoomId: departmentRoomId,
+        departmentName: department.name,
+        departmentId: department.id
       })
       
       // For reconnection, use the guest credentials stored in session
@@ -228,14 +233,15 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       }
       
       const client = new MatrixChatClient(matrixConfig)
-      await client.connect()
+      // Pass department ID to connect for proper room restoration
+      await client.connect(session.userDetails, department.id)
       clientRef.current = client
       
-      // Try to rejoin the existing room
-      if (session.roomId) {
-        console.log('🔄 Rejoining room:', session.roomId)
+      // Try to rejoin the department-specific room
+      if (departmentRoomId) {
+        console.log('🔄 Rejoining department room:', departmentRoomId)
         try {
-          await client.joinRoom(session.roomId)
+          await client.joinRoom(departmentRoomId)
           
           // Load message history
           setChatState(prev => ({ 
@@ -243,7 +249,7 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
             isLoadingHistory: true 
           }))
           
-          const messages = await client.loadMessageHistory(session.roomId)
+          const messages = await client.loadMessageHistory(departmentRoomId)
           
           setChatState(prev => ({
             ...prev,
@@ -252,12 +258,12 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
             isLoadingHistory: false,
             matrixClient: client,
             messages: messages || [],
-            roomId: session.roomId
+            roomId: departmentRoomId
           }))
           
           console.log('✅ Reconnected successfully to existing room')
           onConnect?.({ 
-            roomId: session.roomId, 
+            roomId: departmentRoomId, 
             isReconnection: true,
             department: department.name 
           })
@@ -301,7 +307,7 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       
       logError('Reconnection failed', error, { 
         departmentId: department.id,
-        sessionRoomId: session.roomId 
+        departmentRoomId: departmentRoomId 
       })
     }
   }
