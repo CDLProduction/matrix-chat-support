@@ -19,6 +19,27 @@ export interface ChatSession {
   isReturningUser: boolean;
   guestUserId?: string;
   guestAccessToken?: string;
+  // Department-specific fields (Phase 4)
+  selectedDepartment?: Department;
+  departmentId?: string;
+  departmentHistory?: DepartmentHistory[];
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  matrix: any; // MatrixConfig
+  widget: any; // DepartmentWidgetConfig
+}
+
+export interface DepartmentHistory {
+  departmentId: string;
+  roomId?: string;
+  lastActivity: string;
+  conversationCount: number;
 }
 
 const STORAGE_KEY = 'matrix-chat-session';
@@ -248,7 +269,170 @@ export function isReturningUser(): boolean {
 }
 
 /**
- * Gets session analytics for debugging
+ * Sets the selected department for current session
+ */
+export function setSelectedDepartment(department: Department): void {
+  const session = loadChatSession();
+  
+  // Initialize department history if not exists
+  if (!session.departmentHistory) {
+    session.departmentHistory = [];
+  }
+  
+  // Update or create department history entry
+  const existingHistoryIndex = session.departmentHistory.findIndex(h => h.departmentId === department.id);
+  if (existingHistoryIndex >= 0) {
+    session.departmentHistory[existingHistoryIndex].lastActivity = new Date().toISOString();
+  } else {
+    session.departmentHistory.push({
+      departmentId: department.id,
+      lastActivity: new Date().toISOString(),
+      conversationCount: 0
+    });
+  }
+  
+  updateChatSession({
+    selectedDepartment: department,
+    departmentId: department.id,
+    departmentHistory: session.departmentHistory
+  });
+  
+  console.log('🏢 Department selected:', {
+    departmentId: department.id,
+    departmentName: department.name
+  });
+}
+
+/**
+ * Gets the currently selected department
+ */
+export function getSelectedDepartment(): Department | null {
+  const session = loadChatSession();
+  return session.selectedDepartment || null;
+}
+
+/**
+ * Gets room ID for a specific department (from department history)
+ */
+export function getDepartmentRoomId(departmentId: string): string | null {
+  const session = loadChatSession();
+  if (!session.departmentHistory) {
+    return null;
+  }
+  
+  const departmentHistory = session.departmentHistory.find(h => h.departmentId === departmentId);
+  return departmentHistory?.roomId || null;
+}
+
+/**
+ * Sets room ID for a specific department
+ */
+export function setDepartmentRoomId(departmentId: string, roomId: string): void {
+  const session = loadChatSession();
+  
+  if (!session.departmentHistory) {
+    session.departmentHistory = [];
+  }
+  
+  const existingHistoryIndex = session.departmentHistory.findIndex(h => h.departmentId === departmentId);
+  if (existingHistoryIndex >= 0) {
+    session.departmentHistory[existingHistoryIndex].roomId = roomId;
+    session.departmentHistory[existingHistoryIndex].lastActivity = new Date().toISOString();
+  } else {
+    session.departmentHistory.push({
+      departmentId: departmentId,
+      roomId: roomId,
+      lastActivity: new Date().toISOString(),
+      conversationCount: 0
+    });
+  }
+  
+  // Also update main roomId if this is the currently selected department
+  const updates: Partial<ChatSession> = {
+    departmentHistory: session.departmentHistory
+  };
+  
+  if (session.selectedDepartment?.id === departmentId) {
+    updates.roomId = roomId;
+  }
+  
+  updateChatSession(updates);
+  
+  console.log('🏢 Department room ID set:', {
+    departmentId,
+    roomId,
+    isCurrent: session.selectedDepartment?.id === departmentId
+  });
+}
+
+/**
+ * Increments conversation count for current department
+ */
+export function incrementDepartmentConversationCount(departmentId?: string): void {
+  const session = loadChatSession();
+  const targetDepartmentId = departmentId || session.selectedDepartment?.id;
+  
+  if (!targetDepartmentId) {
+    // Fallback to legacy behavior
+    incrementConversationCount();
+    return;
+  }
+  
+  if (!session.departmentHistory) {
+    session.departmentHistory = [];
+  }
+  
+  const existingHistoryIndex = session.departmentHistory.findIndex(h => h.departmentId === targetDepartmentId);
+  if (existingHistoryIndex >= 0) {
+    session.departmentHistory[existingHistoryIndex].conversationCount++;
+    session.departmentHistory[existingHistoryIndex].lastActivity = new Date().toISOString();
+  } else {
+    session.departmentHistory.push({
+      departmentId: targetDepartmentId,
+      lastActivity: new Date().toISOString(),
+      conversationCount: 1
+    });
+  }
+  
+  // Also update main conversation count
+  updateChatSession({
+    conversationCount: session.conversationCount + 1,
+    departmentHistory: session.departmentHistory
+  });
+  
+  console.log('📊 Department conversation count incremented:', {
+    departmentId: targetDepartmentId,
+    totalConversations: session.conversationCount + 1
+  });
+}
+
+/**
+ * Gets conversation count for a specific department
+ */
+export function getDepartmentConversationCount(departmentId: string): number {
+  const session = loadChatSession();
+  if (!session.departmentHistory) {
+    return 0;
+  }
+  
+  const departmentHistory = session.departmentHistory.find(h => h.departmentId === departmentId);
+  return departmentHistory?.conversationCount || 0;
+}
+
+/**
+ * Clears department-specific data while preserving user session
+ */
+export function clearDepartmentData(): void {
+  updateChatSession({
+    selectedDepartment: undefined,
+    departmentId: undefined,
+    roomId: undefined
+  });
+  console.log('🧹 Department data cleared - user can select new department');
+}
+
+/**
+ * Gets session analytics for debugging (enhanced with department info)
  */
 export function getSessionInfo() {
   const session = loadChatSession();
@@ -259,6 +443,10 @@ export function getSessionInfo() {
     conversationCount: session.conversationCount,
     lastActivity: session.lastActivity,
     isReturning: session.isReturningUser,
+    // Department-specific info
+    selectedDepartment: session.selectedDepartment?.name || null,
+    departmentId: session.departmentId || null,
+    departmentHistoryCount: session.departmentHistory?.length || 0,
     daysSinceLastActivity: Math.floor(
       (Date.now() - new Date(session.lastActivity).getTime()) / (1000 * 3600 * 24)
     )

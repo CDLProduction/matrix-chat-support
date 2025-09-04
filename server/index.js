@@ -49,7 +49,55 @@ function loadConfig() {
   }
 }
 
-function validateConfig() {
+function validateDepartmentConfig(departments) {
+  const errors = []
+  
+  if (!departments || !Array.isArray(departments) || departments.length === 0) {
+    errors.push('At least one department must be configured when using departments mode')
+    return errors
+  }
+  
+  const departmentIds = new Set()
+  
+  departments.forEach((dept, index) => {
+    if (!dept.id || typeof dept.id !== 'string') {
+      errors.push(`Department ${index}: id is required and must be a string`)
+    } else {
+      if (departmentIds.has(dept.id)) {
+        errors.push(`Department ${dept.id}: duplicate department id found`)
+      }
+      departmentIds.add(dept.id)
+    }
+    
+    if (!dept.name || typeof dept.name !== 'string') {
+      errors.push(`Department ${dept.id || index}: name is required`)
+    }
+    
+    if (!dept.matrix) {
+      errors.push(`Department ${dept.id || index}: matrix configuration is required`)
+    } else {
+      // Validate Matrix configuration for each department
+      const homeserver = dept.matrix.homeserver || config.matrix?.homeserver
+      if (!homeserver) {
+        errors.push(`Department ${dept.id}: homeserver URL is required (either in department config or global matrix config)`)
+      } else {
+        try {
+          new URL(homeserver)
+        } catch {
+          errors.push(`Department ${dept.id}: invalid homeserver URL`)
+        }
+      }
+      
+      if (!dept.matrix.access_token || dept.matrix.access_token === 'YOUR_ACCESS_TOKEN_HERE') {
+        errors.push(`Department ${dept.id}: Matrix access token is required`)
+      }
+    }
+  })
+  
+  return errors
+}
+
+function validateLegacyConfig() {
   const errors = []
   
   if (!config.matrix?.homeserver) {
@@ -64,6 +112,21 @@ function validateConfig() {
     new URL(config.matrix.homeserver)
   } catch {
     errors.push('Matrix homeserver URL is invalid')
+  }
+  
+  return errors
+}
+
+function validateConfig() {
+  let errors = []
+  
+  // Check if using departments mode or legacy mode
+  if (config.departments && Array.isArray(config.departments) && config.departments.length > 0) {
+    console.log('🏢 Multi-department mode detected')
+    errors = validateDepartmentConfig(config.departments)
+  } else {
+    console.log('🔧 Legacy single-department mode detected')
+    errors = validateLegacyConfig()
   }
   
   if (errors.length > 0) {
@@ -102,7 +165,7 @@ app.use(cors({
   credentials: true
 }))
 
-// Set CSP headers to allow widget loading
+// Set CSP headers to allow widget loading and debugging
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', 
     "default-src 'self'; " +
@@ -132,17 +195,12 @@ app.get('/', (req, res) => {
   })
 })
 
-app.get('/api/config', (req, res) => {
-  if (!validateConfig()) {
-    return res.status(500).json({
-      error: 'Server configuration is invalid. Check server logs for details.'
-    })
-  }
-  
-  const clientConfig = {
+function buildLegacyClientConfig() {
+  return {
     matrix: {
       homeserver: config.matrix.homeserver,
       accessToken: config.matrix.access_token,
+      adminAccessToken: config.matrix.admin_access_token,
       supportRoomId: config.matrix.support_room_id,
       botUserId: config.matrix.bot_user_id
     },
@@ -154,6 +212,56 @@ app.get('/api/config', (req, res) => {
       greeting: config.widget.greeting,
       placeholderText: config.widget.placeholder_text
     }
+  }
+}
+
+function buildDepartmentClientConfig() {
+  return {
+    departments: config.departments.map(dept => ({
+      id: dept.id,
+      name: dept.name,
+      description: dept.description,
+      icon: dept.icon,
+      color: dept.color,
+      matrix: {
+        homeserver: dept.matrix.homeserver || config.matrix?.homeserver,
+        accessToken: dept.matrix.access_token,
+        adminAccessToken: dept.matrix.admin_access_token,
+        supportRoomId: dept.matrix.support_room_id,
+        botUserId: dept.matrix.bot_user_id
+      },
+      widget: {
+        greeting: dept.widget?.greeting,
+        placeholderText: dept.widget?.placeholder_text,
+        additionalFields: dept.widget?.additional_fields
+      }
+    })),
+    widget: {
+      title: config.widget.title,
+      subtitle: config.widget.subtitle,
+      brandColor: config.widget.brand_color,
+      position: config.widget.position,
+      departmentSelection: config.widget.department_selection
+    }
+  }
+}
+
+app.get('/api/config', (req, res) => {
+  if (!validateConfig()) {
+    return res.status(500).json({
+      error: 'Server configuration is invalid. Check server logs for details.'
+    })
+  }
+  
+  let clientConfig
+  
+  // Check if using departments mode or legacy mode
+  if (config.departments && Array.isArray(config.departments) && config.departments.length > 0) {
+    clientConfig = buildDepartmentClientConfig()
+    console.log('📤 Serving multi-department configuration')
+  } else {
+    clientConfig = buildLegacyClientConfig()
+    console.log('📤 Serving legacy single-department configuration')
   }
   
   res.json(clientConfig)
@@ -174,6 +282,13 @@ if (fs.existsSync(staticPath)) {
 } else {
   console.warn(`Widget assets directory not found: ${staticPath}`)
   console.warn('Run "npm run build:widget" to build the widget assets')
+}
+
+// Serve public files (debug pages, etc.)
+const publicPath = path.resolve(__dirname, '../public')
+if (fs.existsSync(publicPath)) {
+  app.use(express.static(publicPath))
+  console.log(`Serving public files from ${publicPath}`)
 }
 
 app.get('/embed.js', (req, res) => {

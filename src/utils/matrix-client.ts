@@ -1,6 +1,6 @@
 import { createClient, MatrixClient, Room, MatrixEvent, RoomEvent, ClientEvent } from 'matrix-js-sdk'
 import { MatrixConfig, ChatMessage, UserDetails } from '@/types'
-import { getCurrentRoomId, setRoomId, setMatrixUserId, loadChatSession, updateChatSession } from './chat-storage'
+import { getCurrentRoomId, setRoomId, setMatrixUserId, loadChatSession, updateChatSession, getDepartmentRoomId, setDepartmentRoomId } from './chat-storage'
 
 export class MatrixChatClient {
   private client: MatrixClient | null = null
@@ -15,9 +15,41 @@ export class MatrixChatClient {
   private guestAccessToken: string | null = null
   private isLoadingHistory: boolean = false
   private connectionTimestamp: number = 0
+  private hasLoggedFilterSuppression: boolean = false
 
   constructor(config: MatrixConfig) {
     this.config = config
+  }
+
+  /**
+   * Suppresses non-critical Matrix client filter errors that don't affect functionality
+   * These errors occur when guest users try to access sync filters they don't have permission for
+   */
+  private suppressMatrixFilterErrors(): void {
+    // Store original console.error
+    const originalError = console.error
+    
+    console.error = (...args: any[]) => {
+      const message = args.join(' ')
+      
+      // Filter out specific Matrix filter permission errors
+      const isFilterError = message.includes('Getting filter failed') && 
+                           message.includes('M_FORBIDDEN') &&
+                           message.includes('Cannot get filters for other users')
+      
+      // Only suppress filter errors, let all other errors through
+      if (!isFilterError) {
+        originalError.apply(console, args)
+      } else {
+        // Optionally log a single suppressed message to indicate filtering is working
+        if (!this.hasLoggedFilterSuppression) {
+          originalError('ℹ️ Matrix client filter permission errors suppressed (guest user limitations - functionality not affected)')
+          this.hasLoggedFilterSuppression = true
+        }
+      }
+    }
+    
+    console.log('🔇 Matrix client error filtering enabled for guest user session')
   }
 
   /**
@@ -114,8 +146,12 @@ export class MatrixChatClient {
    * For now, we'll use a hardcoded admin token - in production this should be configurable
    */
   private async getAdminToken(): Promise<string> {
-    // TODO: Make this configurable or get from environment
-    return 'syt_YWRtaW4_GzfQPdeOSqBiiuYzLXpL_2nKVjT' // Admin token
+    // Use admin token from configuration for guest user creation
+    const adminToken = this.config.adminAccessToken
+    if (!adminToken) {
+      throw new Error('Admin access token required for guest user creation')
+    }
+    return adminToken
   }
 
   /**
@@ -140,7 +176,7 @@ export class MatrixChatClient {
     return data.user_id
   }
 
-  async connect(userDetails?: UserDetails): Promise<void> {
+  async connect(userDetails?: UserDetails, departmentId?: string): Promise<void> {
     try {
       let userId: string
       let accessToken: string
@@ -156,11 +192,23 @@ export class MatrixChatClient {
         
         console.log('🔗 Connecting as guest user:', userId)
       } else {
-        // Fallback to support bot (for room management operations)
-        userId = await this.getSupportBotUserId()
-        accessToken = this.config.accessToken
-        
-        console.log('🔗 Connecting as support bot:', userId)
+        // Check if we're reconnecting with guest credentials (during page refresh)
+        if (this.config.user_id && this.config.user_id.includes('guest_')) {
+          userId = this.config.user_id
+          accessToken = this.config.accessToken
+          
+          // Set guest properties for proper history loading
+          this.guestUserId = userId
+          this.guestAccessToken = accessToken
+          
+          console.log('🔗 Reconnecting as guest user:', userId)
+        } else {
+          // Fallback to support bot (for room management operations)
+          userId = await this.getSupportBotUserId()
+          accessToken = this.config.accessToken
+          
+          console.log('🔗 Connecting as support bot:', userId)
+        }
       }
       
       this.client = createClient({
@@ -169,35 +217,68 @@ export class MatrixChatClient {
         userId: userId
       })
 
+      // Suppress non-critical Matrix client filter errors to reduce console noise
+      this.suppressMatrixFilterErrors()
+
       // Store Matrix user ID for session tracking
       setMatrixUserId(userId)
 
       this.client.on(RoomEvent.Timeline, this.handleTimelineEvent.bind(this))
       this.client.on(ClientEvent.Sync, this.handleSync.bind(this))
+      
+      // Auto-join rooms on invite (Matrix SDK best practice)
+      this.client.on(RoomEvent.MyMembership, (room, membership, prevMembership) => {
+        if (membership === 'invite') {
+          console.log('🎟️ Auto-joining room on invitation:', room.roomId)
+          this.client!.joinRoom(room.roomId).then(() => {
+            console.log('✅ Auto-joined room:', room.roomId)
+            this.currentRoomId = room.roomId
+          }).catch((error) => {
+            console.error('❌ Failed to auto-join room:', error)
+          })
+        }
+      })
 
       await this.client.startClient()
       
       // Mark connection timestamp for timeline event filtering
       this.connectionTimestamp = Date.now()
       
-      // Try to restore existing room if available
-      const existingRoomId = getCurrentRoomId()
-      console.log('🔍 ROOM RESTORE DEBUG - existingRoomId from storage:', existingRoomId)
-      if (existingRoomId) {
-        console.log('🔍 Checking existing room access:', existingRoomId, 'as user:', userId)
-        const hasAccess = await this.verifyRoomAccess(existingRoomId)
-        console.log('🔍 Room access result:', hasAccess)
-        
-        if (hasAccess) {
-          this.currentRoomId = existingRoomId
-          console.log('🔄 Restored existing room successfully:', existingRoomId)
+      // For department switches, restore the specific department's room
+      if (departmentId) {
+        const departmentRoomId = getDepartmentRoomId(departmentId)
+        if (departmentRoomId) {
+          console.log('🏢 Restoring department-specific room:', departmentId, departmentRoomId)
+          const hasAccess = await this.verifyRoomAccess(departmentRoomId)
+          if (hasAccess) {
+            this.currentRoomId = departmentRoomId
+            console.log('✅ Successfully restored department room:', departmentRoomId)
+          } else {
+            console.log('❌ Lost access to department room:', departmentRoomId)
+            setDepartmentRoomId(departmentId, '') // Clear invalid room
+          }
         } else {
-          console.log('🚫 Lost access to previous room, will create new one')
-          // Clear the invalid room ID from storage
-          setRoomId('')
+          console.log('🆕 No existing room for department:', departmentId)
         }
       } else {
-        console.log('🔍 No existing room ID found in storage')
+        // Legacy/initial connection - try to restore any existing room
+        const existingRoomId = getCurrentRoomId()
+        console.log('🔍 ROOM RESTORE DEBUG - existingRoomId from storage:', existingRoomId)
+        if (existingRoomId) {
+          console.log('🔍 Checking existing room access:', existingRoomId, 'as user:', userId)
+          const hasAccess = await this.verifyRoomAccess(existingRoomId)
+          console.log('🔍 Room access result:', hasAccess)
+          
+          if (hasAccess) {
+            this.currentRoomId = existingRoomId
+            console.log('🔄 Restored existing room successfully:', existingRoomId)
+          } else {
+            console.log('🚫 Lost access to previous room, will create new one')
+            setRoomId('')
+          }
+        } else {
+          console.log('🔍 No existing room ID found in storage')
+        }
       }
       
       this.notifyConnection(true)
@@ -209,16 +290,38 @@ export class MatrixChatClient {
 
   async disconnect(): Promise<void> {
     if (this.client) {
+      console.log('🧹 Disconnecting Matrix client (preserving room memberships)...')
+      
+      // Remove all event listeners to prevent bleeding events
+      this.client.removeAllListeners()
+      
+      // For department switching, DON'T leave rooms - just disconnect the client
+      // This preserves room memberships so we can reconnect later
+      console.log('💾 Preserving room memberships for department switching')
+      
+      // Stop the client connection
       this.client.stopClient()
+      
+      // Clear the client reference  
       this.client = null
     }
+    
+    // Clear internal state but preserve room information
     this.currentRoomId = null
     this.processedMessageIds.clear()
     this.initialSyncComplete = false
+    this.isLoadingHistory = false
+    this.connectionTimestamp = 0
+    
+    // Clear guest credentials but preserve room data
+    this.guestUserId = null
+    this.guestAccessToken = null
+    
+    console.log('✅ Matrix client disconnected (room memberships preserved)')
     this.notifyConnection(false)
   }
 
-  async createOrJoinSupportRoom(userDetails: UserDetails): Promise<string> {
+  async createOrJoinSupportRoom(userDetails: UserDetails, departmentInfo?: { name: string; id: string }, isDepartmentSwitch?: boolean): Promise<string> {
     if (!this.client) {
       throw new Error('Matrix client not connected')
     }
@@ -232,16 +335,48 @@ export class MatrixChatClient {
       })
       console.log('🔍 CREATE/JOIN DEBUG - currentRoomId:', this.currentRoomId)
       
-      // Check if user already has a room and it's accessible
-      if (this.currentRoomId && await this.verifyRoomAccess(this.currentRoomId)) {
-        console.log('🔄 Using existing room:', this.currentRoomId)
-        
-        // Send a message indicating user is returning
-        if (session.isReturningUser && session.conversationCount > 0) {
-          await this.sendMessage(`I'm back to continue our conversation.`)
+      // Always check for department-specific room first (for both new and returning users)
+      if (departmentInfo) {
+        const departmentRoomId = getDepartmentRoomId(departmentInfo.id)
+        if (departmentRoomId) {
+          console.log('🏢 Found existing room for department:', departmentInfo.name, departmentRoomId)
+          
+          // Verify access to this department's room
+          if (await this.verifyRoomAccess(departmentRoomId)) {
+            console.log('✅ Successfully accessing department room:', departmentRoomId)
+            this.currentRoomId = departmentRoomId
+            
+            // Send a message indicating user is returning to this department
+            if (session.isReturningUser && session.conversationCount > 0) {
+              await this.sendMessage(`I'm back to continue our conversation with ${departmentInfo.name}.`)
+            }
+            
+            return departmentRoomId
+          } else {
+            console.log('❌ Lost access to department room, will create new one:', departmentRoomId)
+            // Clear the invalid room ID from this department's storage
+            setDepartmentRoomId(departmentInfo.id, '')
+          }
+        } else {
+          console.log('🆕 No existing room found for department:', departmentInfo.name)
+        }
+      } else {
+        // Legacy support (no department info) - check global room
+        let targetRoomId = this.currentRoomId
+        if (session.isReturningUser && !targetRoomId) {
+          targetRoomId = getCurrentRoomId() || null
         }
         
-        return this.currentRoomId
+        if (targetRoomId && await this.verifyRoomAccess(targetRoomId)) {
+          console.log('🔄 Using existing legacy room:', targetRoomId)
+          this.currentRoomId = targetRoomId
+          
+          if (session.isReturningUser && session.conversationCount > 0) {
+            await this.sendMessage(`I'm back to continue our conversation.`)
+          }
+          
+          return targetRoomId
+        }
       }
 
       // Use configured shared room if available
@@ -269,9 +404,11 @@ export class MatrixChatClient {
           userId: await this.getSupportBotUserId()
         })
         
+        // Create department-specific room name and topic
+        const departmentPrefix = departmentInfo ? `${departmentInfo.name}` : 'Support'
         const roomOptions = {
-          name: `Support: ${userDetails.name}`,
-          topic: `Customer: ${userDetails.name} (${userDetails.email}) - Guest: ${currentUserId}`,
+          name: `${departmentPrefix}: ${userDetails.name}`,
+          topic: `${departmentInfo ? `[${departmentInfo.name}] ` : ''}Customer: ${userDetails.name} (${userDetails.email}) - Guest: ${currentUserId}`,
           initial_state: [
             {
               type: 'm.room.guest_access',
@@ -311,9 +448,10 @@ export class MatrixChatClient {
         }
 
         // Send initial context message as support bot
+        const departmentContext = departmentInfo ? `\nDepartment: ${departmentInfo.name} (${departmentInfo.id})` : ''
         const contextMessage = session.isReturningUser && session.conversationCount > 0
-          ? `Returning customer: ${userDetails.name}\nPrevious conversations: ${session.conversationCount}\n\nContact: ${userDetails.email}${userDetails.phone ? ` | ${userDetails.phone}` : ''}\n\nConnected as: ${currentUserId}`
-          : `New customer: ${userDetails.name}\nContact: ${userDetails.email}${userDetails.phone ? ` | ${userDetails.phone}` : ''}\n\nConnected as: ${currentUserId}`
+          ? `Returning customer: ${userDetails.name}\nPrevious conversations: ${session.conversationCount}${departmentContext}\n\nContact: ${userDetails.email}${userDetails.phone ? ` | ${userDetails.phone}` : ''}\n\nConnected as: ${currentUserId}`
+          : `New customer: ${userDetails.name}${departmentContext}\nContact: ${userDetails.email}${userDetails.phone ? ` | ${userDetails.phone}` : ''}\n\nConnected as: ${currentUserId}`
 
         await supportBotClient.sendTextMessage(this.currentRoomId, contextMessage)
         
@@ -331,9 +469,10 @@ export class MatrixChatClient {
         
       } else {
         // We're connected as support bot, create room normally
+        const departmentPrefix = departmentInfo ? `${departmentInfo.name}` : 'Support'
         const roomOptions = {
-          name: `Support: ${userDetails.name}`,
-          topic: `Customer: ${userDetails.name} (${userDetails.email})`,
+          name: `${departmentPrefix}: ${userDetails.name}`,
+          topic: `${departmentInfo ? `[${departmentInfo.name}] ` : ''}Customer: ${userDetails.name} (${userDetails.email})`,
           initial_state: [
             {
               type: 'm.room.guest_access',
@@ -383,7 +522,26 @@ export class MatrixChatClient {
 
 
   private handleTimelineEvent(event: MatrixEvent, room: Room | undefined): void {
-    if (!room || !this.currentRoomId || room.roomId !== this.currentRoomId) {
+    // Enhanced filtering with debug logging for department switching issues  
+    if (!room) {
+      console.warn('⚠️ Timeline event received with no room context')
+      return
+    }
+    
+    if (!this.currentRoomId) {
+      console.warn('⚠️ Timeline event received but no currentRoomId set:', {
+        eventRoom: room.roomId,
+        eventType: event.getType()
+      })
+      return
+    }
+    
+    if (room.roomId !== this.currentRoomId) {
+      console.warn('⚠️ Timeline event from different room (potential bleed):', {
+        eventRoom: room.roomId,
+        currentRoom: this.currentRoomId,
+        eventType: event.getType()
+      })
       return
     }
 
@@ -450,23 +608,18 @@ export class MatrixChatClient {
     const isRecentMessage = messageAge < (24 * 60 * 60 * 1000) // Less than 24 hours old
     const isInitialConnection = (Date.now() - this.connectionTimestamp) < 30000 // First 30 seconds after connection
     
-    // For customer messages: Include if it's a returning user connecting for the first time, or during explicit history loading
-    const shouldIncludeCustomerMessage = isCustomerMessage && (
-      this.isLoadingHistory || 
-      (isReturningUser && isInitialConnection && isRecentMessage)
-    )
+    // For customer messages: ONLY include during explicit history loading
+    // Never process customer messages via timeline during live chat to prevent duplication
+    const shouldIncludeCustomerMessage = isCustomerMessage && this.isLoadingHistory
     
     if (isCustomerMessage && !shouldIncludeCustomerMessage) {
-      console.log('⚠️ Skipping customer message from timeline (live session or old message):', eventId)
+      console.log('⚠️ Skipping customer message from timeline (prevents duplication during live chat):', eventId)
       this.processedMessageIds.add(eventId)
       return
     } else if (shouldIncludeCustomerMessage) {
-      console.log('📚 Including customer message:', {
+      console.log('📚 Including customer message from timeline (history loading):', {
         eventId: eventId.substring(0, 20) + '...',
-        isLoadingHistory: this.isLoadingHistory,
-        isReturningUser: isReturningUser,
-        isInitialConnection: isInitialConnection,
-        messageAgeHours: Math.round(messageAge / (60 * 60 * 1000))
+        isLoadingHistory: this.isLoadingHistory
       })
     }
 
@@ -666,11 +819,20 @@ export class MatrixChatClient {
       
       // Use appropriate access token based on current user
       const isGuestUser = currentUserId.includes('guest_')
-      const accessToken = isGuestUser ? this.guestAccessToken : this.config.accessToken
+      const accessToken = isGuestUser 
+        ? (this.guestAccessToken || this.config.accessToken) // Fallback to config token during reconnection
+        : this.config.accessToken
       
       if (!accessToken) {
         throw new Error('No access token available for message history loading')
       }
+      
+      console.log('🔑 Using access token for history API:', {
+        isGuestUser,
+        hasGuestAccessToken: !!this.guestAccessToken,
+        usingConfigToken: !this.guestAccessToken,
+        tokenPreview: accessToken.substring(0, 10) + '...'
+      })
       
       const response = await fetch(`${this.config.homeserver}/_matrix/client/r0/rooms/${roomId}/messages?limit=${limit}&dir=b`, {
         headers: {
@@ -749,6 +911,40 @@ export class MatrixChatClient {
       // Always reset the flag when history loading is complete
       this.isLoadingHistory = false
       console.log('🔄 Set isLoadingHistory = false - history loading complete')
+    }
+  }
+
+  /**
+   * Joins an existing Matrix room (for reconnection purposes)
+   */
+  async joinRoom(roomId: string): Promise<void> {
+    if (!this.client) {
+      throw new Error('Matrix client not connected')
+    }
+
+    console.log(`🚪 Attempting to join room: ${roomId}`)
+    
+    try {
+      // First check if we're already in the room
+      const room = this.client.getRoom(roomId)
+      if (room && room.getMyMembership() === 'join') {
+        console.log(`✅ Already joined room: ${roomId}`)
+        this.currentRoomId = roomId
+        return
+      }
+
+      // Join the room via Matrix API
+      await this.client.joinRoom(roomId)
+      this.currentRoomId = roomId
+      
+      // Update storage
+      setRoomId(roomId)
+      
+      console.log(`✅ Successfully joined room: ${roomId}`)
+      
+    } catch (error: any) {
+      console.error(`❌ Failed to join room ${roomId}:`, error)
+      throw new Error(`Failed to join room: ${error.message}`)
     }
   }
 

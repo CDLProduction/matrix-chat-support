@@ -9,28 +9,28 @@ departments:
     color: "#667eea"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_c3VwcG9ydA_rBNoCezBSscbgSBWJNDe_01H4vC"
-      admin_access_token: "syt_YWRtaW4_BQfxXVPTThskoPUVbrlj_2F4lBY"
+      access_token: "syt_c3VwcG9ydA_psMTnoIovNQDWvfXaqMt_0GCzoW"
+      admin_access_token: "syt_YWRtaW4_WNlzETRkptENqltWuBNN_10RcpI"
       support_room_id: null  # Creates new rooms per conversation
       bot_user_id: "@support:localhost"
     widget:
       greeting: "Hi! How can our support team help you today?"
       placeholder_text: "Describe your technical issue or question..."
   
-  - id: "tech_support"
-    name: "Tech Support"
-    description: "Advanced technical assistance"
+  - id: "sales"
+    name: "Sales & Inquiries"
+    description: "Product information and purchasing"
     icon: "💼"
     color: "#10b981"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_dGVjaF9zdXBwb3J0_McCliYceMhGwBaqsaJAT_1kwoQ1"
-      admin_access_token: "syt_YWRtaW4_BQfxXVPTThskoPUVbrlj_2F4lBY"
+      access_token: "syt_c3VwcG9ydA_psMTnoIovNQDWvfXaqMt_0GCzoW"  # Can use same or different token
+      admin_access_token: "syt_YWRtaW4_WNlzETRkptENqltWuBNN_10RcpI"
       support_room_id: null
-      bot_user_id: "@tech_support:localhost"
+      bot_user_id: "@support:localhost"  # Using same bot for demo
     widget:
-      greeting: "Tech Support here! What technical issue can we resolve?"
-      placeholder_text: "Describe your technical issue in detail..."
+      greeting: "Welcome! Ready to learn more about our products?"
+      placeholder_text: "What product or service interests you?"
   
   - id: "identification"
     name: "Account Verification"
@@ -39,10 +39,10 @@ departments:
     color: "#f59e0b"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_aWRlbnRpZmljYXRpb24_qaBeBxSYnEVFZTZPzJAi_2U8l15"
-      admin_access_token: "syt_YWRtaW4_BQfxXVPTThskoPUVbrlj_2F4lBY"
+      access_token: "syt_c3VwcG9ydA_psMTnoIovNQDWvfXaqMt_0GCzoW"
+      admin_access_token: "syt_YWRtaW4_WNlzETRkptENqltWuBNN_10RcpI"
       support_room_id: null
-      bot_user_id: "@identification:localhost"
+      bot_user_id: "@support:localhost"
     widget:
       greeting: "We'll help you verify your account securely."
       placeholder_text: "Please describe the account issue you're experiencing..."
@@ -50,8 +50,8 @@ departments:
 # Legacy Matrix configuration (used as fallback for missing values)
 matrix:
   homeserver: "http://localhost:8008"
-  access_token: "syt_c3VwcG9ydA_KmhAKVzMaoTbQXQUvbNG_0ZZgsr"
-  admin_access_token: "syt_YWRtaW4_BQfxXVPTThskoPUVbrlj_2F4lBY"
+  access_token: "syt_c3VwcG9ydA_psMTnoIovNQDWvfXaqMt_0GCzoW"
+  admin_access_token: "syt_YWRtaW4_WNlzETRkptENqltWuBNN_10RcpI"
   support_room_id: null
   bot_user_id: "@support:localhost"
 

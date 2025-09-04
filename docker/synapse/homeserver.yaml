@@ -2,6 +2,7 @@
 
 # Server
 server_name: "localhost"
+report_stats: false
 pid_file: /data/homeserver.pid
 web_client_location: http://localhost:8081/
 public_baseurl: http://localhost:8008/
