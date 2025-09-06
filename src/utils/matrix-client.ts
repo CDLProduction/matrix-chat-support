@@ -1,8 +1,10 @@
 import { createClient, MatrixClient, Room, MatrixEvent, RoomEvent, ClientEvent } from 'matrix-js-sdk'
-import { MatrixConfig, ChatMessage, UserDetails } from '@/types'
+import { MatrixConfig, ChatMessage, UserDetails, Department, SpaceSessionContext, ChatSession } from '@/types'
 import { getCurrentRoomId, setRoomId, setMatrixUserId, loadChatSession, updateChatSession, getDepartmentRoomId, getAllDepartmentRoomIds, clearDepartmentRoomId, setDepartmentRoomStatus, getDepartmentRoomInfo } from './chat-storage'
 import { getUserFriendlyErrorMessage, logError, isRetryableError, ErrorContext } from './error-handler'
 import { logRoomOperation, logDepartmentSwitch, createRoomSnapshot } from './room-operation-logger'
+import { SpaceManager } from './space-manager'
+import { ConfigManager } from './config-manager'
 
 export class MatrixChatClient {
   private client: MatrixClient | null = null
@@ -20,9 +22,102 @@ export class MatrixChatClient {
   private hasLoggedFilterSuppression: boolean = false
   private isReconnecting: boolean = false
   private reconnectingToDepartment: string | null = null
+  private spaceManager: SpaceManager | null = null
+  private configManager: ConfigManager | null = null
 
   constructor(config: MatrixConfig) {
     this.config = config
+    this.initializeSpaceManagement()
+  }
+
+  /**
+   * Initialize space management components
+   */
+  private async initializeSpaceManagement(): Promise<void> {
+    try {
+      this.configManager = new ConfigManager()
+      await this.configManager.loadSpaceConfiguration()
+      
+      // SpaceManager will be initialized when we have a connected client
+      console.log('[MatrixClient] Space configuration loaded successfully')
+    } catch (error) {
+      console.warn('[MatrixClient] Failed to load space configuration:', error)
+      // Continue without space management - fallback to legacy behavior
+    }
+  }
+
+  /**
+   * Initialize SpaceManager with connected Matrix client
+   */
+  private async initializeSpaceManagerWithClient(): Promise<void> {
+    if (!this.client || !this.configManager) {
+      return
+    }
+
+    try {
+      const spacesConfig = await this.configManager.loadSpaceConfiguration()
+      this.spaceManager = new SpaceManager(this.client, spacesConfig)
+      console.log('[MatrixClient] SpaceManager initialized successfully')
+    } catch (error) {
+      console.warn('[MatrixClient] Failed to initialize SpaceManager:', error)
+      this.spaceManager = null
+    }
+  }
+
+  /**
+   * Organize newly created room in Matrix Spaces hierarchy
+   */
+  private async organizeRoomInSpaces(roomId: string, departmentInfo?: { name: string; id: string }): Promise<SpaceSessionContext | null> {
+    if (!this.spaceManager) {
+      console.log('[MatrixClient] SpaceManager not available, skipping space organization')
+      return null
+    }
+
+    try {
+      // Convert department info to Department type for space resolution
+      const department: Department = departmentInfo ? {
+        id: departmentInfo.id,
+        name: departmentInfo.name,
+        matrix: this.config,
+        widget: {}
+      } : {
+        id: 'support',
+        name: 'Support',
+        matrix: this.config,
+        widget: {}
+      }
+
+      // Resolve appropriate space context for this room (defaults to web-chat channel)
+      const spaceContext = await this.spaceManager.resolveSpaceForRoom(department, 'web-chat')
+
+      // Add room to the appropriate space based on department space configuration
+      const targetSpaceId = spaceContext.departmentSpaceId || spaceContext.channelSpaceId
+      if (targetSpaceId) {
+        await this.spaceManager.addRoomToSpace(roomId, targetSpaceId)
+        console.log('[MatrixClient] Room successfully organized in space hierarchy', {
+          roomId,
+          targetSpaceId,
+          department: department.name,
+          spaceHierarchy: spaceContext.spaceHierarchy
+        })
+      }
+
+      // Store space context in the session for future use
+      const session = loadChatSession()
+      if (session) {
+        const updatedSession: ChatSession = {
+          ...session,
+          spaceContext: spaceContext
+        }
+        updateChatSession(updatedSession)
+      }
+
+      return spaceContext
+    } catch (error) {
+      console.error('[MatrixClient] Failed to organize room in spaces:', error)
+      // Continue without space organization - don't break room creation
+      return null
+    }
   }
 
   /**
@@ -235,6 +330,9 @@ export class MatrixChatClient {
         accessToken: accessToken,
         userId: userId
       })
+
+      // Initialize SpaceManager with connected client
+      await this.initializeSpaceManagerWithClient()
 
       // Suppress non-critical Matrix client filter errors to reduce console noise
       this.suppressMatrixFilterErrors()
@@ -512,6 +610,9 @@ export class MatrixChatClient {
         const response = await supportBotClient.createRoom(roomOptions)
         this.currentRoomId = response.room_id
 
+        // Phase 2: Matrix Spaces Integration - Organize room in space hierarchy
+        await this.organizeRoomInSpaces(this.currentRoomId, departmentInfo)
+
         // Store room ID for future sessions
         setRoomId(this.currentRoomId)
 
@@ -566,6 +667,10 @@ export class MatrixChatClient {
 
         const response = await this.client.createRoom(roomOptions)
         this.currentRoomId = response.room_id
+
+        // Phase 2: Matrix Spaces Integration - Organize room in space hierarchy
+        await this.organizeRoomInSpaces(this.currentRoomId, departmentInfo)
+
         setRoomId(this.currentRoomId)
         
       }

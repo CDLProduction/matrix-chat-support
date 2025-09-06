@@ -216,6 +216,48 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* Space Indicator */
+.spaceIndicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.85;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
+  letter-spacing: -0.005em;
+}
+
+.spaceIndicator:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.spaceIcon {
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+
+.spaceText {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.spaceDetail {
+  opacity: 0.8;
+  font-weight: 400;
+}
+
 .closeButton {
   background: none;
   border: none;
@@ -646,6 +688,41 @@
   margin-top: -1px;
 }
 
+/* Enhanced Error Container */
+.errorContainer {
+  margin: 16px 20px;
+}
+
+.errorContainer .error {
+  margin: 0;
+}
+
+/* Space-aware Error Guidance */
+.spaceErrorGuidance {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: rgba(79, 70, 229, 0.06);
+  border: 1px solid rgba(79, 70, 229, 0.1);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #4F46E5;
+  line-height: 1.4;
+}
+
+.spaceErrorIcon {
+  opacity: 0.8;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.spaceErrorGuidance strong {
+  font-weight: 600;
+  color: #4338CA;
+}
+
 .success {
   padding: 12px 16px;
   background: linear-gradient(135deg, #f0fff4 0%, #c6f6d5 100%);
@@ -924,6 +1001,32 @@
   color: #64748b;
   font-size: 14px;
   line-height: 1.4;
+}
+
+/* Space Context Info */
+.spaceContextInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: rgba(79, 70, 229, 0.06);
+  border: 1px solid rgba(79, 70, 229, 0.1);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #4F46E5;
+  font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.spaceContextInfo:hover {
+  background: rgba(79, 70, 229, 0.08);
+  border-color: rgba(79, 70, 229, 0.15);
+}
+
+.spaceContextIcon {
+  opacity: 0.8;
+  flex-shrink: 0;
 }
 
 .departmentGrid {

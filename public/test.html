@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Chat Widget - Test Page</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .test-section {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            text-align: left;
+        }
+        
+        .test-section h2 {
+            margin-bottom: 15px;
+            color: #fff;
+        }
+        
+        .test-instructions {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .test-instructions ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .test-instructions li {
+            margin-bottom: 5px;
+        }
+        
+        .status-box {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-family: monospace;
+        }
+        
+        .button {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+        
+        .button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .debug-info {
+            font-family: monospace;
+            font-size: 12px;
+            opacity: 0.7;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎧 Matrix Chat Support</h1>
+            <p>Multi-Department Widget Test Page</p>
+        </div>
+        
+        <div class="test-section">
+            <h2>📋 Refresh Bug Testing</h2>
+            <div class="test-instructions">
+                <p><strong>To reproduce the white screen bug:</strong></p>
+                <ol>
+                    <li>Click the chat widget button (should appear in bottom-right)</li>
+                    <li>Select any department (Support, Sales, or ID Verification)</li>
+                    <li>Fill out the contact form and start a chat</li>
+                    <li>Send at least one message</li>
+                    <li><strong>Refresh the page (F5 or Ctrl+R)</strong></li>
+                    <li>Click the widget button again</li>
+                    <li><strong>Bug</strong>: Widget should show white screen with only header visible</li>
+                </ol>
+            </div>
+            
+            <div class="status-box" id="widget-status">
+                Widget Status: <span id="status">Loading...</span>
+            </div>
+            
+            <button class="button" onclick="checkWidgetStatus()">Check Widget Status</button>
+            <button class="button" onclick="clearStorage()">Clear Storage</button>
+            <button class="button" onclick="reloadWidget()">Reload Widget</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>🔧 Debug Information</h2>
+            <div class="status-box" id="debug-info">
+                <div>Page loaded at: <span id="load-time"></span></div>
+                <div>User Agent: <span id="user-agent"></span></div>
+                <div>localStorage items: <span id="storage-count"></span></div>
+                <div>sessionStorage items: <span id="session-count"></span></div>
+                <div>Chat storage keys: <span id="chat-keys"></span></div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>🎯 Testing Scenarios</h2>
+            <div class="test-instructions">
+                <p><strong>Test these scenarios:</strong></p>
+                <ul>
+                    <li><strong>Fresh Session</strong>: Clear storage and test new chat</li>
+                    <li><strong>Department Selection</strong>: Try all 3 departments</li>
+                    <li><strong>Page Refresh</strong>: Refresh during active chat (main bug)</li>
+                    <li><strong>Browser Restart</strong>: Close/reopen browser to test persistence</li>
+                    <li><strong>Multiple Tabs</strong>: Open widget in multiple tabs</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="debug-info">
+            <p>Server: http://localhost:3001 | Debug Page: <a href="/debug-messages.html" style="color: rgba(255,255,255,0.8);">debug-messages.html</a></p>
+            <p>Config API: <a href="/api/config" style="color: rgba(255,255,255,0.8);">/api/config</a> | Health: <a href="/health" style="color: rgba(255,255,255,0.8);">/health</a></p>
+        </div>
+    </div>
+
+    <!-- Load the Matrix Chat Widget -->
+    <script src="/embed.js"></script>
+    
+    <script>
+        // Debug functions
+        function updateDebugInfo() {
+            document.getElementById('load-time').textContent = new Date().toLocaleString();
+            document.getElementById('user-agent').textContent = navigator.userAgent.split(' ')[0] + '...';
+            document.getElementById('storage-count').textContent = localStorage.length;
+            document.getElementById('session-count').textContent = sessionStorage.length;
+            
+            // Check for chat-related storage keys
+            const chatKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.includes('matrix') || key.includes('chat') || key.includes('widget'))) {
+                    chatKeys.push(key);
+                }
+            }
+            document.getElementById('chat-keys').textContent = chatKeys.length > 0 ? chatKeys.join(', ') : 'none';
+        }
+        
+        function checkWidgetStatus() {
+            const status = document.getElementById('status');
+            
+            // Check if widget script loaded
+            if (window.MatrixChatWidget) {
+                status.textContent = 'Widget script loaded ✓';
+                status.style.color = '#4ade80';
+            } else {
+                status.textContent = 'Widget script NOT loaded ✗';
+                status.style.color = '#f87171';
+            }
+            
+            // Check if widget button is visible
+            const widgetButton = document.querySelector('.matrix-chat-widget');
+            if (widgetButton) {
+                status.textContent += ' | Button visible ✓';
+            } else {
+                status.textContent += ' | Button NOT visible ✗';
+            }
+            
+            updateDebugInfo();
+        }
+        
+        function clearStorage() {
+            localStorage.clear();
+            sessionStorage.clear();
+            document.getElementById('status').textContent = 'Storage cleared - refresh page to test fresh state';
+            document.getElementById('status').style.color = '#fbbf24';
+            updateDebugInfo();
+        }
+        
+        function reloadWidget() {
+            // Remove existing widget elements
+            const existingWidgets = document.querySelectorAll('.matrix-chat-widget');
+            existingWidgets.forEach(el => el.remove());
+            
+            // Remove existing styles and scripts
+            const existingStyles = document.querySelectorAll('link[href*="style.css"]');
+            existingStyles.forEach(el => el.remove());
+            
+            // Reload embed script
+            const script = document.createElement('script');
+            script.src = '/embed.js?t=' + Date.now(); // Cache bust
+            document.head.appendChild(script);
+            
+            document.getElementById('status').textContent = 'Widget reloaded - check in 2 seconds';
+            document.getElementById('status').style.color = '#60a5fa';
+            
+            setTimeout(checkWidgetStatus, 2000);
+        }
+        
+        // Initialize debug info
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDebugInfo();
+            
+            // Check widget status after a delay to let it load
+            setTimeout(checkWidgetStatus, 3000);
+            
+            // Log any console errors
+            const originalError = console.error;
+            console.error = function(...args) {
+                const errorDiv = document.createElement('div');
+                errorDiv.style.color = '#f87171';
+                errorDiv.style.marginTop = '5px';
+                errorDiv.textContent = 'Console Error: ' + args.join(' ');
+                document.getElementById('debug-info').appendChild(errorDiv);
+                originalError.apply(console, args);
+            };
+        });
+        
+        // Log widget events for debugging
+        window.addEventListener('matrix-widget-loaded', function() {
+            console.log('Matrix widget loaded event');
+            checkWidgetStatus();
+        });
+        
+        window.addEventListener('matrix-widget-error', function(e) {
+            console.error('Matrix widget error event', e.detail);
+            document.getElementById('status').textContent = 'Widget Error: ' + (e.detail?.message || 'Unknown error');
+            document.getElementById('status').style.color = '#f87171';
+        });
+    </script>
+</body>
+</html>

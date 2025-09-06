@@ -15,11 +15,11 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Redis for Synapse caching and workers
+  # Redis for Synapse caching
   redis:
     image: redis:7-alpine
     container_name: matrix-redis
@@ -31,9 +31,9 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Matrix Synapse homeserver
   synapse:
@@ -47,6 +47,8 @@ services:
     environment:
       - SYNAPSE_SERVER_NAME=localhost
       - SYNAPSE_REPORT_STATS=no
+      - UID=1000
+      - GID=1000
     volumes:
       - synapse_data:/data
     networks:
@@ -56,10 +58,11 @@ services:
       - "8448:8448"  # HTTPS federation port
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8008/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8008/_matrix/client/versions || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 60s
 
   # Synapse Admin interface
   synapse-admin:
@@ -75,7 +78,7 @@ services:
       - matrix-network
     restart: unless-stopped
 
-  # Element Web client (optional)
+  # Element Web client
   element:
     image: vectorim/element-web:latest
     container_name: matrix-element

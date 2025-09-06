@@ -20,7 +20,7 @@ import UserDetailsForm from './UserDetailsForm'
 import ChatInterface from './ChatInterface'
 import styles from '@/styles/widget.module.css'
 
-const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnect, onMessage, onDepartmentSelect }) => {
+const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnect, onMessage, onDepartmentSelect, onSpaceContext }) => {
   // Initialize state with proper step based on configuration
   const initialStep = config.departments && config.departments.length > 0 ? 'department-selection' : 'user-form'
   
@@ -49,6 +49,13 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
   })
 
   const clientRef = useRef<MatrixChatClient | null>(null)
+
+  // Call onSpaceContext callback when space context becomes available
+  useEffect(() => {
+    if (chatState.session?.spaceContext && onSpaceContext) {
+      onSpaceContext(chatState.session.spaceContext)
+    }
+  }, [chatState.session?.spaceContext, onSpaceContext])
 
   // Helper function to get effective matrix config (department-specific or legacy)
   const getEffectiveMatrixConfig = () => {
@@ -919,6 +926,22 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
                     <span className={styles.departmentName}>
                       {chatState.selectedDepartment.icon} {chatState.selectedDepartment.name}
                     </span>
+                    {/* Space context indicator */}
+                    {chatState.session?.spaceContext && config.widget.spaces?.showSpaceInHeader !== false && config.widget.spaces?.spaceIndicatorStyle !== 'hidden' && (
+                      <div className={styles.spaceIndicator} title="Matrix Space: Organized conversation">
+                        <svg className={styles.spaceIcon} width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M4 2H20C21.1 2 22 2.9 22 4V20C22 21.1 21.1 22 20 22H4C2.9 22 2 21.1 2 20V4C2.9 2 4 2.9 4 2ZM4 4V8H20V4H4ZM4 10V14H12V10H4ZM14 10V14H20V10H14ZM4 16V20H12V16H4ZM14 16V20H20V16H14Z"/>
+                        </svg>
+                        <span className={styles.spaceText}>
+                          {config.widget.spaces?.displayChannelOrigin !== false ? 'Web-Chat Space' : 'Space'}
+                          {config.widget.spaces?.spaceIndicatorStyle === 'detailed' && chatState.session?.spaceContext?.departmentSpaceId && (
+                            <span className={styles.spaceDetail}>
+                              → {chatState.selectedDepartment?.name}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
                     {config.departments && config.departments.length > 1 && (
                       <button 
                         className={styles.switchDepartmentBtn}
@@ -947,8 +970,21 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
 
           <div className={styles.modalContent}>
             {chatState.error && (
-              <div className={styles.error}>
-                {chatState.error}
+              <div className={styles.errorContainer}>
+                <div className={styles.error}>
+                  {chatState.error}
+                </div>
+                {/* Space-aware error guidance */}
+                {chatState.error.includes('space') && (
+                  <div className={styles.spaceErrorGuidance}>
+                    <svg className={styles.spaceErrorIcon} width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/>
+                    </svg>
+                    <div>
+                      <strong>Space Organization:</strong> Your conversation will still be created successfully, just without the enhanced space organization features.
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

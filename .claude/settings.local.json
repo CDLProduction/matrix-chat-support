@@ -22,7 +22,16 @@
       "Bash(fuser:*)",
       "Bash(sed:*)",
       "Bash(git restore:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "WebSearch",
+      "WebFetch(domain:matrix.org)",
+      "WebFetch(domain:spec.matrix.org)",
+      "Bash(node:*)",
+      "Bash(npm run dev:*)",
+      "Bash(sudo chown:*)",
+      "Bash(chmod:*)",
+      "Bash(docker system prune:*)",
+      "Bash(docker volume prune:*)"
     ],
     "deny": [],
     "ask": [],

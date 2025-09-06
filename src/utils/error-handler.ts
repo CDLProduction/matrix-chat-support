@@ -222,3 +222,19 @@ export function logError(context: ErrorContext, additionalInfo?: any): void {
     additionalInfo
   })
 }
+
+/**
+ * Transforms technical errors into user-friendly error objects
+ */
+export function transformUserFriendlyError(originalError: unknown, userMessage: string): Error {
+  const errorMessage = originalError instanceof Error ? originalError.message : String(originalError)
+  const friendlyError = new Error(userMessage)
+  
+  // Preserve original error details in a property for debugging
+  if (originalError instanceof Error) {
+    (friendlyError as any).originalError = originalError
+    (friendlyError as any).originalStack = originalError.stack
+  }
+  
+  return friendlyError
+}

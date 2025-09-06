@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Chat Support - Architecture Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 30px 0;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: #a8a8a8;
+            font-size: 1.1rem;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .control-btn {
+            padding: 10px 20px;
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid #667eea;
+            color: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .control-btn:hover {
+            background: rgba(102, 126, 234, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .control-btn.active {
+            background: #667eea;
+        }
+
+        .architecture-container {
+            position: relative;
+            width: 100%;
+            min-height: 800px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 20px;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            z-index: 100;
+        }
+
+        .zoom-btn {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .zoom-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .diagram-wrapper {
+            transform-origin: center;
+            transition: transform 0.3s ease;
+            cursor: grab;
+            user-select: none;
+        }
+
+        .diagram-wrapper.dragging {
+            cursor: grabbing;
+        }
+
+        /* Architecture Components */
+        .layer {
+            margin-bottom: 50px;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .layer-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #667eea;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .components {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .component {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .component:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: #667eea;
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        }
+
+        .component.minimized {
+            padding: 10px;
+        }
+
+        .component.minimized .component-details {
+            display: none;
+        }
+
+        .component-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .component-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .component-badge {
+            background: rgba(102, 126, 234, 0.2);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #a8b2ff;
+        }
+
+        .component-details {
+            color: #a8a8a8;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .component-details ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .component-details li {
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .component-details li:last-child {
+            border-bottom: none;
+        }
+
+        .tech-stack {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .tech-badge {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #10b981;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        /* Connection Lines */
+        .connections {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .connection-line {
+            stroke: rgba(102, 126, 234, 0.3);
+            stroke-width: 2;
+            fill: none;
+            stroke-dasharray: 5, 5;
+            animation: dash 20s linear infinite;
+        }
+
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -100;
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Modal for detailed view */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            border: 1px solid rgba(102, 126, 234, 0.3);
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #fff;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Flow Diagram */
+        .flow-diagram {
+            margin: 30px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+        }
+
+        .flow-step {
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .flow-step::after {
+            content: '→';
+            position: absolute;
+            right: -30px;
+            font-size: 24px;
+            color: #667eea;
+        }
+
+        .flow-step:last-child::after {
+            content: '';
+        }
+
+        .flow-number {
+            background: #667eea;
+            color: #fff;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+
+        .flow-content {
+            flex: 1;
+        }
+
+        .flow-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .flow-description {
+            color: #a8a8a8;
+            font-size: 0.9rem;
+        }
+
+        /* Stats Section */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #a8a8a8;
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8rem;
+            }
+
+            .components {
+                grid-template-columns: 1fr;
+            }
+
+            .modal-content {
+                margin: 20px;
+                max-height: 90vh;
+            }
+        }
+
+        /* 3D Rotation */
+        .rotate-3d {
+            transform-style: preserve-3d;
+            transition: transform 0.6s ease;
+        }
+
+        .rotate-3d.rotating {
+            animation: rotate3d 10s linear infinite;
+        }
+
+        @keyframes rotate3d {
+            from {
+                transform: perspective(1000px) rotateY(0deg);
+            }
+            to {
+                transform: perspective(1000px) rotateY(360deg);
+            }
+        }
+
+        /* Department Colors */
+        .dept-support { border-left: 4px solid #667eea; }
+        .dept-tech { border-left: 4px solid #10b981; }
+        .dept-account { border-left: 4px solid #f59e0b; }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Matrix Chat Support Architecture</h1>
+            <p class="subtitle">Complete System Architecture Visualization</p>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #667eea;"></div>
+                    <span>General Support</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #10b981;"></div>
+                    <span>Tech Support</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f59e0b;"></div>
+                    <span>Account Verification</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="controls">
+            <button class="control-btn active" onclick="showView('overview')">System Overview</button>
+            <button class="control-btn" onclick="showView('frontend')">Frontend Architecture</button>
+            <button class="control-btn" onclick="showView('backend')">Backend Architecture</button>
+            <button class="control-btn" onclick="showView('matrix')">Matrix Integration</button>
+            <button class="control-btn" onclick="showView('strategy')">Strategy 2.1 Flow</button>
+            <button class="control-btn" onclick="toggleRotation()">3D Rotate</button>
+            <button class="control-btn" onclick="toggleMinimize()">Minimize All</button>
+        </div>
+
+        <div class="architecture-container">
+            <div class="zoom-controls">
+                <button class="zoom-btn" onclick="zoomIn()">+</button>
+                <button class="zoom-btn" onclick="zoomOut()">-</button>
+                <button class="zoom-btn" onclick="resetZoom()">⟲</button>
+            </div>
+
+            <div class="diagram-wrapper" id="diagramWrapper">
+                <!-- Overview View -->
+                <div id="overview" class="view-content">
+                    <div class="layer">
+                        <h2 class="layer-title">🎯 Frontend Layer</h2>
+                        <div class="components">
+                            <div class="component" onclick="showDetails('widget')">
+                                <div class="component-header">
+                                    <span class="component-title">Chat Widget</span>
+                                    <span class="component-badge">React 18</span>
+                                </div>
+                                <div class="component-details">
+                                    <ul>
+                                        <li>📦 Bundle: 9.78 MB (3.5 MB gzip)</li>
+                                        <li>🎨 CSS Modules styling</li>
+                                        <li>📱 Responsive design</li>
+                                        <li>🔄 Real-time messaging</li>
+                                        <li>💾 Session persistence</li>
+                                    </ul>
+                                    <div class="tech-stack">
+                                        <span class="tech-badge">React 18</span>
+                                        <span class="tech-badge">TypeScript</span>
+                                        <span class="tech-badge">Vite</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="component" onclick="showDetails('departments')">
+                                <div class="component-header">
+                                    <span class="component-title">Department Selector</span>
+                                    <span class="component-badge">Multi-Dept</span>
+                                </div>
+                                <div class="component-details">
+                                    <ul>
+                                        <li class="dept-support">General Support</li>
+                                        <li class="dept-tech">Tech Support</li>
+                                        <li class="dept-account">Account Verification</li>
+                                        <li>🎯 Smart routing</li>
+                                        <li>🔄 Department switching</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="component" onclick="showDetails('storage')">
+                                <div class="component-header">
+                                    <span class="component-title">Storage System</span>
+                                    <span class="component-badge">Dual Layer</span>
+                                </div>
+                                <div class="component-details">
+                                    <ul>
+                                        <li>💾 LocalStorage (primary)</li>
+                                        <li>🍪 Cookie fallback</li>
+                                        <li>📊 30-day retention</li>
+                                        <li>🔐 Session management</li>
+                                        <li>🏢 Department history</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="layer">
+                        <h2 class="layer-title">⚙️ Backend Layer</h2>
+                        <div class="components">
+                            <div class="component" onclick="showDetails('express')">
+                                <div class="component-header">
+                                    <span class="component-title">Express Server</span>
+                                    <span class="component-badge">Node.js</span>
+                                </div>
+                                <div class="component-details">
+                                    <ul>
+                                        <li>🚀 Port: 3001</li>
+                                        <li>🔧 CORS enabled</li>
+                                        <li>📁 Static file serving</li>
+                                        <li>🔒 CSP headers</li>
+                                        <li>📊 Health monitoring</li>
+                                    </ul>
+                                    <div class="tech-stack">
+                                        <span class="tech-badge">Express</span>
+                                        <span class="tech-badge">YAML Config</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="component" onclick="showDetails('api')">
+                                <div class="component-header">
+                                    <span class="component-title">API Endpoints</span>
+                                    <span class="component-badge">RESTful</span>
+                                </div>
+                                <div class="component-details">
+                                    <ul>
+                                        <li>GET /api/config</li>
+                                        <li>GET /embed.js</li>
+                                        <li>GET /health</li>
+                                        <li>GET /widget/*</li>
+                                        <li>GET /public/*</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="component" onclick="showDetails('config')">
+                                <div class="component-header">
+                                    <span class="component-title">Configuration</span>
+                                    <span class="component-badge">YAML</span>
+                                </div>
+                                <div class="component-details">
+                                    <ul>
+                                        <li>📝 config.yaml</li>
+                                        <li>🏢 config-departments.yaml</li>
+                                        <li>🔑 Access tokens</li>
+                                        <li>🌐 Homeserver URLs</li>
+                                        <li>🎨 Widget settings</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="layer">
+                        <h2 class="layer-title">🔌 Matrix Integration Layer</h2>
+                        <div class="components">
+                            <div class="component" onclick="showDetails('matrix-client')">
+                                <div class="component-header">
+                                    <span class="component-title">Matrix Client</span>
+                                    <span class="component-badge">matrix-js-sdk</span>
+                                </div>
+                                <div class="component-details">
+                                    <ul>
+                                        <li>🔐 Guest user creation</li>
+                                        <li>🏠 Room management</li>
+                                        <li>📨 Message handling</li>
+                                        <li>🔄 Real-time sync</li>
+                                        <li>📚 History loading</li>
+                                    </ul>
+                                    <div class="tech-stack">
+                                        <span class="tech-badge">matrix-js-sdk</span>
+                                        <span class="tech-badge">WebSocket</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="component" onclick="showDetails('strategy21')">
+                                <div class="component-header">
+                                    <span class="component-title">Strategy 2.1</span>
+                                    <span class="component-badge">Room Preservation</span>
+                                </div>
+                                <div class="component-details">
+                                    <ul>
+                                        <li>🔄 Smart room preservation</li>
+                                        <li>🚪 Leave but remember</li>
+                                        <li>🤖 Bot-assisted re-invitation</li>
+                                        <li>📊 Status tracking</li>
+                                        <li>🧹 Invalid room cleanup</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="component" onclick="showDetails('synapse')">
+                                <div class="component-header">
+                                    <span class="component-title">Synapse Server</span>
+                                    <span class="component-badge">Matrix Protocol</span>
+                                </div>
+                                <div class="component-details">
+                                    <ul>
+                                        <li>🌐 localhost:8008</li>
+                                        <li>👥 User management</li>
+                                        <li>🏠 Room federation</li>
+                                        <li>🔐 Admin API</li>
+                                        <li>📊 Event streaming</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stats Section -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value">3</div>
+                            <div class="stat-label">Departments</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">663</div>
+                            <div class="stat-label">Modules</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">9.78MB</div>
+                            <div class="stat-label">Bundle Size</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">30d</div>
+                            <div class="stat-label">Session Retention</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">v2.1</div>
+                            <div class="stat-label">Strategy Version</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">100%</div>
+                            <div class="stat-label">Production Ready</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Strategy 2.1 Flow View -->
+                <div id="strategy" class="view-content" style="display:none;">
+                    <div class="flow-diagram">
+                        <h2 class="layer-title">🔄 Strategy 2.1: Smart Room Preservation Flow</h2>
+                        
+                        <div class="flow-step">
+                            <div class="flow-number">1</div>
+                            <div class="flow-content">
+                                <div class="flow-title">User Selects Department</div>
+                                <div class="flow-description">User chooses from General Support, Tech Support, or Account Verification</div>
+                            </div>
+                        </div>
+
+                        <div class="flow-step">
+                            <div class="flow-number">2</div>
+                            <div class="flow-content">
+                                <div class="flow-title">Room Status Check</div>
+                                <div class="flow-description">System checks if room exists: 'active', 'left', 'invalid', or none</div>
+                            </div>
+                        </div>
+
+                        <div class="flow-step">
+                            <div class="flow-number">3</div>
+                            <div class="flow-content">
+                                <div class="flow-title">Smart Room Decision</div>
+                                <div class="flow-description">
+                                    • Active → Direct join<br>
+                                    • Left → Request bot re-invitation<br>
+                                    • Invalid/None → Create new room
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flow-step">
+                            <div class="flow-number">4</div>
+                            <div class="flow-content">
+                                <div class="flow-title">Department Switch</div>
+                                <div class="flow-description">Previous room marked as 'left', preserved for future re-entry</div>
+                            </div>
+                        </div>
+
+                        <div class="flow-step">
+                            <div class="flow-number">5</div>
+                            <div class="flow-content">
+                                <div class="flow-title">Room Cleanup</div>
+                                <div class="flow-description">Invalid rooms older than 7 days are automatically cleaned up</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="components">
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">Room States</span>
+                                <span class="component-badge">Status Tracking</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>✅ <strong>Active:</strong> Currently in room</li>
+                                    <li>🚪 <strong>Left:</strong> Room preserved for re-invitation</li>
+                                    <li>❌ <strong>Invalid:</strong> Room no longer exists</li>
+                                    <li>➕ <strong>None:</strong> No room created yet</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">Key Benefits</span>
+                                <span class="component-badge">Advantages</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>💾 Conversation history preserved</li>
+                                    <li>🚀 Fast department switching</li>
+                                    <li>🔄 Seamless re-entry</li>
+                                    <li>🧹 Clean Matrix state</li>
+                                    <li>📊 No room duplication</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">Implementation Details</span>
+                                <span class="component-badge">Technical</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>📁 matrix-client.ts: Core logic</li>
+                                    <li>💾 chat-storage.ts: State persistence</li>
+                                    <li>🎯 ChatWidget.tsx: UI integration</li>
+                                    <li>🤖 Bot-assisted re-invitations</li>
+                                    <li>🔐 Guest user management</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Frontend Architecture View -->
+                <div id="frontend" class="view-content" style="display:none;">
+                    <h2 class="layer-title">🎨 Frontend Architecture Details</h2>
+                    <div class="components">
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">Component Structure</span>
+                                <span class="component-badge">React Components</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>📦 ChatWidget.tsx (Main container)</li>
+                                    <li>🎯 DepartmentSelector.tsx</li>
+                                    <li>📝 UserDetailsForm.tsx</li>
+                                    <li>💬 ChatInterface.tsx</li>
+                                    <li>📜 LongMessage.tsx</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">State Management</span>
+                                <span class="component-badge">React Hooks</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>useState for local state</li>
+                                    <li>useEffect for lifecycle</li>
+                                    <li>useRef for DOM/client refs</li>
+                                    <li>Custom hooks for logic</li>
+                                    <li>No external state library</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">Build System</span>
+                                <span class="component-badge">Vite</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>⚡ Fast HMR development</li>
+                                    <li>📦 IIFE bundle format</li>
+                                    <li>🔧 TypeScript support</li>
+                                    <li>🎨 CSS Modules</li>
+                                    <li>🗜️ Production optimization</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">Styling System</span>
+                                <span class="component-badge">CSS Modules</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>📁 widget.module.css</li>
+                                    <li>🎨 Scoped styles</li>
+                                    <li>📱 Responsive breakpoints</li>
+                                    <li>🌈 CSS variables</li>
+                                    <li>✨ Smooth animations</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Backend Architecture View -->
+                <div id="backend" class="view-content" style="display:none;">
+                    <h2 class="layer-title">⚙️ Backend Architecture Details</h2>
+                    <div class="components">
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">Server Configuration</span>
+                                <span class="component-badge">Express Setup</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>📁 server/index.js</li>
+                                    <li>🔧 ES6 modules</li>
+                                    <li>🌐 CORS configuration</li>
+                                    <li>🔒 Security headers</li>
+                                    <li>📊 Request logging</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">YAML Configuration</span>
+                                <span class="component-badge">Config Files</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>config/config.yaml (main)</li>
+                                    <li>config-departments.yaml</li>
+                                    <li>Matrix credentials</li>
+                                    <li>Widget settings</li>
+                                    <li>Department definitions</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">Static File Serving</span>
+                                <span class="component-badge">Assets</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>dist/widget/* files</li>
+                                    <li>public/* test pages</li>
+                                    <li>embed.js loader</li>
+                                    <li>MIME type handling</li>
+                                    <li>Cache control</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Matrix Integration View -->
+                <div id="matrix" class="view-content" style="display:none;">
+                    <h2 class="layer-title">🔌 Matrix Integration Details</h2>
+                    <div class="components">
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">Guest User System</span>
+                                <span class="component-badge">User Management</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>👤 Auto guest creation</li>
+                                    <li>🔑 Temporary credentials</li>
+                                    <li>📝 guest_[timestamp]_[id]</li>
+                                    <li>🔐 Admin API usage</li>
+                                    <li>💾 Session persistence</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">Room Operations</span>
+                                <span class="component-badge">Room Management</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>🏠 createRoom()</li>
+                                    <li>🚪 joinRoom()</li>
+                                    <li>👋 leaveRoom()</li>
+                                    <li>📨 inviteUser()</li>
+                                    <li>🔄 rejoinExistingRoom()</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">Message Handling</span>
+                                <span class="component-badge">Communication</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>📤 sendMessage()</li>
+                                    <li>📥 Timeline events</li>
+                                    <li>🔄 Real-time sync</li>
+                                    <li>📚 History loading</li>
+                                    <li>🎯 Message attribution</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="component">
+                            <div class="component-header">
+                                <span class="component-title">Department Bots</span>
+                                <span class="component-badge">Bot Accounts</span>
+                            </div>
+                            <div class="component-details">
+                                <ul>
+                                    <li>🎧 @support:localhost</li>
+                                    <li>💼 @tech_support:localhost</li>
+                                    <li>🔒 @identification:localhost</li>
+                                    <li>🤖 Automated responses</li>
+                                    <li>📨 Re-invitation capability</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for detailed information -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal()">×</button>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let zoomLevel = 1;
+        let isRotating = false;
+        let isMinimized = false;
+        let isDragging = false;
+        let startX, startY, scrollLeft, scrollTop;
+
+        const diagramWrapper = document.getElementById('diagramWrapper');
+        const detailModal = document.getElementById('detailModal');
+        const modalContent = document.getElementById('modalContent');
+
+        // View switching
+        function showView(viewName) {
+            document.querySelectorAll('.view-content').forEach(view => {
+                view.style.display = 'none';
+            });
+            
+            const targetView = document.getElementById(viewName);
+            if (targetView) {
+                targetView.style.display = 'block';
+            }
+
+            // Update active button
+            document.querySelectorAll('.control-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.toLowerCase().includes(viewName) || 
+                    (viewName === 'overview' && btn.textContent === 'System Overview') ||
+                    (viewName === 'strategy' && btn.textContent.includes('Strategy'))) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // Reset zoom when changing views
+            resetZoom();
+        }
+
+        // Zoom controls
+        function zoomIn() {
+            if (zoomLevel < 2) {
+                zoomLevel += 0.1;
+                updateZoom();
+            }
+        }
+
+        function zoomOut() {
+            if (zoomLevel > 0.5) {
+                zoomLevel -= 0.1;
+                updateZoom();
+            }
+        }
+
+        function resetZoom() {
+            zoomLevel = 1;
+            updateZoom();
+        }
+
+        function updateZoom() {
+            diagramWrapper.style.transform = `scale(${zoomLevel})`;
+        }
+
+        // 3D rotation toggle
+        function toggleRotation() {
+            isRotating = !isRotating;
+            diagramWrapper.classList.toggle('rotate-3d');
+            diagramWrapper.classList.toggle('rotating');
+            
+            const btn = event.target;
+            btn.classList.toggle('active');
+        }
+
+        // Minimize/Maximize all components
+        function toggleMinimize() {
+            isMinimized = !isMinimized;
+            document.querySelectorAll('.component').forEach(component => {
+                if (isMinimized) {
+                    component.classList.add('minimized');
+                } else {
+                    component.classList.remove('minimized');
+                }
+            });
+            
+            const btn = event.target;
+            btn.textContent = isMinimized ? 'Maximize All' : 'Minimize All';
+        }
+
+        // Show component details in modal
+        function showDetails(componentId) {
+            const details = getComponentDetails(componentId);
+            modalContent.innerHTML = details;
+            detailModal.classList.add('active');
+        }
+
+        function closeModal() {
+            detailModal.classList.remove('active');
+        }
+
+        function getComponentDetails(componentId) {
+            const details = {
+                'widget': `
+                    <h2>Chat Widget Component</h2>
+                    <p>The main React component that orchestrates the entire chat interface.</p>
+                    <h3>Key Features:</h3>
+                    <ul>
+                        <li>Component-based architecture using React 18</li>
+                        <li>TypeScript for type safety</li>
+                        <li>CSS Modules for scoped styling</li>
+                        <li>Vite for fast development and optimized builds</li>
+                        <li>IIFE bundle format for easy embedding</li>
+                    </ul>
+                    <h3>File Structure:</h3>
+                    <pre>
+src/components/
+├── ChatWidget.tsx (Main container)
+├── DepartmentSelector.tsx
+├── UserDetailsForm.tsx
+├── ChatInterface.tsx
+└── LongMessage.tsx
+                    </pre>
+                    <h3>Bundle Statistics:</h3>
+                    <ul>
+                        <li>Size: 9.78 MB (uncompressed)</li>
+                        <li>Gzipped: 3.53 MB</li>
+                        <li>Modules: 663</li>
+                        <li>Build time: ~7 seconds</li>
+                    </ul>
+                `,
+                'departments': `
+                    <h2>Multi-Department System</h2>
+                    <p>Intelligent routing system for directing users to appropriate support teams.</p>
+                    <h3>Configured Departments:</h3>
+                    <ol>
+                        <li><strong>General Support</strong>
+                            <ul>
+                                <li>Bot: @support:localhost</li>
+                                <li>Color: #667eea</li>
+                                <li>Icon: 🎧</li>
+                            </ul>
+                        </li>
+                        <li><strong>Tech Support</strong>
+                            <ul>
+                                <li>Bot: @tech_support:localhost</li>
+                                <li>Color: #10b981</li>
+                                <li>Icon: 💼</li>
+                            </ul>
+                        </li>
+                        <li><strong>Account Verification</strong>
+                            <ul>
+                                <li>Bot: @identification:localhost</li>
+                                <li>Color: #f59e0b</li>
+                                <li>Icon: 🔒</li>
+                            </ul>
+                        </li>
+                    </ol>
+                    <h3>Switching Mechanism:</h3>
+                    <p>Strategy 2.1 enables seamless switching between departments while preserving conversation history.</p>
+                `,
+                'matrix-client': `
+                    <h2>Matrix Client Integration</h2>
+                    <p>Core Matrix protocol implementation using matrix-js-sdk.</p>
+                    <h3>Key Capabilities:</h3>
+                    <ul>
+                        <li>Guest user creation and management</li>
+                        <li>Room creation with metadata</li>
+                        <li>Real-time message synchronization</li>
+                        <li>Timeline event handling</li>
+                        <li>History restoration from previous sessions</li>
+                    </ul>
+                    <h3>Connection Flow:</h3>
+                    <ol>
+                        <li>Create/retrieve guest credentials</li>
+                        <li>Initialize Matrix client</li>
+                        <li>Start client sync</li>
+                        <li>Join/create appropriate room</li>
+                        <li>Begin message exchange</li>
+                    </ol>
+                    <h3>Error Handling:</h3>
+                    <p>Comprehensive error handling with user-friendly messages and automatic recovery attempts.</p>
+                `,
+                'strategy21': `
+                    <h2>Strategy 2.1: Smart Room Preservation</h2>
+                    <p>Advanced room management strategy that preserves conversation history while maintaining clean Matrix state.</p>
+                    <h3>Room Status Lifecycle:</h3>
+                    <ul>
+                        <li><strong>Active:</strong> User currently in room</li>
+                        <li><strong>Left:</strong> Room preserved for re-invitation</li>
+                        <li><strong>Invalid:</strong> Room no longer exists on server</li>
+                        <li><strong>None:</strong> No room created yet</li>
+                    </ul>
+                    <h3>Key Innovations:</h3>
+                    <ul>
+                        <li>Rooms are left but not forgotten</li>
+                        <li>Bot-assisted re-invitation system</li>
+                        <li>Automatic cleanup of invalid rooms (7 days)</li>
+                        <li>Membership history tracking</li>
+                        <li>Prevents room duplication</li>
+                    </ul>
+                    <h3>Benefits:</h3>
+                    <ul>
+                        <li>Faster department switching</li>
+                        <li>Preserved conversation context</li>
+                        <li>Reduced server load</li>
+                        <li>Better user experience</li>
+                    </ul>
+                `,
+                'storage': `
+                    <h2>Storage System</h2>
+                    <p>Dual-layer storage system for maximum reliability.</p>
+                    <h3>Storage Layers:</h3>
+                    <ol>
+                        <li><strong>LocalStorage (Primary):</strong>
+                            <ul>
+                                <li>Full session data</li>
+                                <li>Department history</li>
+                                <li>Room mappings</li>
+                                <li>User details</li>
+                            </ul>
+                        </li>
+                        <li><strong>Cookies (Fallback):</strong>
+                            <ul>
+                                <li>User ID only</li>
+                                <li>30-day expiration</li>
+                                <li>Cross-subdomain support</li>
+                            </ul>
+                        </li>
+                    </ol>
+                    <h3>Data Structure:</h3>
+                    <pre>
+{
+  userId: "user_xxx",
+  roomId: "!xxx:localhost",
+  departmentHistory: [{
+    departmentId: "support",
+    roomId: "!xxx:localhost",
+    roomStatus: "active",
+    lastActivity: "2024-01-01T00:00:00Z",
+    conversationCount: 5
+  }],
+  userDetails: {...},
+  matrixUserId: "@guest_xxx:localhost",
+  guestAccessToken: "xxx"
+}
+                    </pre>
+                `,
+                'express': `
+                    <h2>Express Server</h2>
+                    <p>Node.js backend server handling API requests and static file serving.</p>
+                    <h3>Configuration:</h3>
+                    <ul>
+                        <li>Port: 3001</li>
+                        <li>CORS: Enabled with credentials</li>
+                        <li>CSP: Comprehensive security policy</li>
+                        <li>Static serving: /widget and /public</li>
+                    </ul>
+                    <h3>Middleware Stack:</h3>
+                    <ol>
+                        <li>CORS handling</li>
+                        <li>Security headers</li>
+                        <li>JSON body parsing</li>
+                        <li>Static file serving</li>
+                        <li>Error handling</li>
+                    </ol>
+                `
+            };
+
+            return details[componentId] || '<h2>Component Details</h2><p>Details for this component are being prepared.</p>';
+        }
+
+        // Drag functionality
+        diagramWrapper.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.component') || e.target.closest('.zoom-controls')) return;
+            isDragging = true;
+            diagramWrapper.classList.add('dragging');
+            startX = e.pageX - diagramWrapper.offsetLeft;
+            startY = e.pageY - diagramWrapper.offsetTop;
+            scrollLeft = diagramWrapper.parentElement.scrollLeft;
+            scrollTop = diagramWrapper.parentElement.scrollTop;
+        });
+
+        diagramWrapper.addEventListener('mouseup', () => {
+            isDragging = false;
+            diagramWrapper.classList.remove('dragging');
+        });
+
+        diagramWrapper.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const x = e.pageX - diagramWrapper.offsetLeft;
+            const y = e.pageY - diagramWrapper.offsetTop;
+            const walkX = (x - startX) * 2;
+            const walkY = (y - startY) * 2;
+            diagramWrapper.parentElement.scrollLeft = scrollLeft - walkX;
+            diagramWrapper.parentElement.scrollTop = scrollTop - walkY;
+        });
+
+        // Modal close on outside click
+        detailModal.addEventListener('click', (e) => {
+            if (e.target === detailModal) {
+                closeModal();
+            }
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === '+' || e.key === '=') {
+                    e.preventDefault();
+                    zoomIn();
+                }
+                if (e.key === '-') {
+                    e.preventDefault();
+                    zoomOut();
+                }
+                if (e.key === '0') {
+                    e.preventDefault();
+                    resetZoom();
+                }
+            }
+        });
+
+        // Initialize
+        showView('overview');
+    </script>
+</body>
+</html>

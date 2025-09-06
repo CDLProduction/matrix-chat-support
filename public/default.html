@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Chat Support - Default Test Page</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 600px;
+            margin: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .description {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            border-left: 4px solid #667eea;
+        }
+        
+        .feature-list {
+            text-align: left;
+            margin: 1.5rem 0;
+        }
+        
+        .feature-list li {
+            margin: 0.5rem 0;
+            padding-left: 0.5rem;
+        }
+        
+        .cta {
+            background: #667eea;
+            color: white;
+            padding: 0.8rem 2rem;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin: 1rem;
+            transition: background 0.3s ease;
+        }
+        
+        .cta:hover {
+            background: #5a6fd8;
+        }
+        
+        .footer {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #eee;
+            color: #888;
+            font-size: 0.9rem;
+        }
+        
+        .widget-info {
+            background: #e3f2fd;
+            padding: 1rem;
+            border-radius: 6px;
+            margin: 1rem 0;
+            border: 1px solid #bbdefb;
+        }
+        
+        .widget-info strong {
+            color: #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎧 Matrix Chat Support</h1>
+        <p class="subtitle">Multi-Department Customer Support Widget</p>
+        
+        <div class="description">
+            <h3>Welcome to the Default Test Page</h3>
+            <p>This page demonstrates the Matrix Chat Support widget in action. The widget provides seamless customer support through Matrix/Synapse integration with multi-department routing.</p>
+        </div>
+        
+        <div class="widget-info">
+            <strong>Widget Status:</strong> Active and Ready<br>
+            <strong>Mode:</strong> Multi-Department<br>
+            <strong>Departments:</strong> General Support, Tech Support, Account Verification
+        </div>
+        
+        <div class="feature-list">
+            <h4>Key Features:</h4>
+            <ul>
+                <li>✅ Multi-department support routing</li>
+                <li>✅ Chat history persistence across sessions</li>
+                <li>✅ Guest user creation for seamless experience</li>
+                <li>✅ Strategy 2.1 room preservation for department switching</li>
+                <li>✅ Real-time Matrix protocol messaging</li>
+                <li>✅ Professional UI with responsive design</li>
+            </ul>
+        </div>
+        
+        <button class="cta" onclick="openWidget()">Test Widget Manually</button>
+        
+        <div class="description">
+            <h4>How to Test:</h4>
+            <p>Click the chat button in the bottom-right corner to start a conversation. You can:</p>
+            <ul style="text-align: left;">
+                <li>Select different departments to test routing</li>
+                <li>Send messages to test real-time communication</li>
+                <li>Refresh the page to test session persistence</li>
+                <li>Switch between departments to test Strategy 2.1</li>
+            </ul>
+        </div>
+        
+        <div class="footer">
+            <p>Matrix Chat Support Widget v1.0.0</p>
+            <p>Server: <span id="server-status">Checking...</span></p>
+        </div>
+    </div>
+
+    <!-- Matrix Chat Support Widget -->
+    <script src="/embed.js"></script>
+    
+    <script>
+        // Test widget programmatically
+        function openWidget() {
+            // Try to open the widget if it's available
+            if (window.MatrixChatWidget && window.MatrixChatWidget.open) {
+                window.MatrixChatWidget.open();
+            } else {
+                alert('Widget is loading or not available. Please try the chat button in the bottom-right corner.');
+            }
+        }
+        
+        // Check server status
+        fetch('/health')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('server-status').textContent = `✅ Online (${data.version})`;
+                document.getElementById('server-status').style.color = '#10b981';
+            })
+            .catch(error => {
+                document.getElementById('server-status').textContent = '❌ Offline';
+                document.getElementById('server-status').style.color = '#ef4444';
+            });
+        
+        // Log widget events for testing
+        window.addEventListener('matrix-widget-opened', () => {
+            console.log('Widget opened');
+        });
+        
+        window.addEventListener('matrix-widget-closed', () => {
+            console.log('Widget closed');
+        });
+    </script>
+</body>
+</html>

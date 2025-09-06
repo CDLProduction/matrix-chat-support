@@ -29,6 +29,13 @@ const DepartmentSelector: React.FC<DepartmentSelectorProps> = ({
           <p className={styles.selectorSubtitle}>
             {config.subtitle || 'Choose the team that best matches your needs'}
           </p>
+          {/* Space context indicator for department selection */}
+          <div className={styles.spaceContextInfo}>
+            <svg className={styles.spaceContextIcon} width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4 2H20C21.1 2 22 2.9 22 4V20C22 21.1 21.1 22 20 22H4C2.9 22 2 21.1 2 20V4C2.9 2 4 2.9 4 2ZM4 4V8H20V4H4ZM4 10V14H12V10H4ZM14 10V14H20V10H14ZM4 16V20H12V16H4ZM14 16V20H20V16H14Z"/>
+            </svg>
+            <span>All conversations organized in Web-Chat Space</span>
+          </div>
         </div>
       </div>
       

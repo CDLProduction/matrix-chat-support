@@ -4,6 +4,137 @@ export interface MatrixConfig {
   adminAccessToken?: string
   supportRoomId?: string
   botUserId?: string
+  spaceConfig?: DepartmentSpaceConfig
+}
+
+// Matrix Spaces Configuration Interfaces
+export interface SpaceConfig {
+  name: string
+  description: string
+  spaceId?: string
+  parentSpaceId?: string
+  avatar?: string
+  topic?: string
+  visibility?: 'public' | 'private' | 'invite_only'
+  enabled?: boolean
+  powerLevels?: SpacePowerLevels
+}
+
+export interface SpacePowerLevels {
+  invite?: number
+  kick?: number
+  ban?: number
+  redact?: number
+  events_default?: number
+  users_default?: number
+  state_default?: number
+}
+
+export interface CommunicationChannel extends SpaceConfig {
+  id: string
+  departments?: string[]
+}
+
+export interface DepartmentSpaceConfig {
+  channelId: string
+  parentSpaceId?: string
+  departmentSpaceId?: string
+  autoCreateDepartmentSpace?: boolean
+  departmentSpaceNaming?: string
+}
+
+export interface SpacesConfiguration {
+  spaces: {
+    rootSpace: SpaceConfig
+    communicationChannels: CommunicationChannel[]
+  }
+  settings: SpaceSettings
+  departmentSpaces: Record<string, DepartmentSpaceSettings>
+  appearance: SpaceAppearanceConfig
+  logging: SpaceLoggingConfig
+  matrix: SpaceMatrixConfig
+  features: SpaceFeatureFlags
+}
+
+export interface SpaceSettings {
+  autoSetupSpaces: boolean
+  spaceCreationMode: 'auto' | 'manual' | 'disabled'
+  repairHierarchyOnStart: boolean
+  spaceNamingPattern: string
+  maxRoomsPerSpace: number
+  maxHierarchyDepth: number
+  autoCleanup: {
+    enabled: boolean
+    emptySpaceRetentionDays: number
+  }
+}
+
+export interface DepartmentSpaceSettings {
+  autoCreateDepartmentSpaces: boolean
+  visibility: 'public' | 'private' | 'invite_only'
+  roomNamingPattern: string
+  organization: {
+    groupBy: 'none' | 'date' | 'department' | 'user'
+    maxRoomsPerDepartment: number
+    autoArchiveAfterDays: number
+  }
+}
+
+export interface SpaceAppearanceConfig {
+  showSpaceInHeader: boolean
+  displayChannelOrigin: boolean
+  allowSpaceSwitching: boolean
+  spaceIcons: Record<string, string>
+  spaceColors: Record<string, string>
+}
+
+export interface SpaceLoggingConfig {
+  logSpaceOperations: boolean
+  logHierarchyChanges: boolean
+  logRoomSpaceChanges: boolean
+  spaceLogLevel: 'debug' | 'info' | 'warn' | 'error'
+}
+
+export interface SpaceMatrixConfig {
+  rateLimiting: {
+    spaceCreation: number
+    roomToSpace: number
+    hierarchyQuery: number
+  }
+  retryPolicy: {
+    maxRetries: number
+    retryDelayMs: number
+    exponentialBackoff: boolean
+  }
+  sync: {
+    syncIntervalMinutes: number
+    validateIntegrity: boolean
+    autoRepair: boolean
+  }
+}
+
+export interface SpaceFeatureFlags {
+  debugMode: boolean
+  analytics: boolean
+  experimentalFeatures: boolean
+  performanceMonitoring: boolean
+}
+
+export interface SpaceHierarchy {
+  roomId: string
+  childrenState: SpaceChild[]
+  children?: SpaceHierarchy[]
+}
+
+export interface SpaceChild {
+  roomId: string
+  roomType?: string
+  name?: string
+  topic?: string
+  avatar?: string
+  via: string[]
+  suggested?: boolean
+  order?: string
 }
 
 export interface DepartmentWidgetConfig {
@@ -46,6 +177,14 @@ export interface WidgetConfig {
   greeting?: string
   placeholderText?: string
   departmentSelection?: DepartmentSelectionConfig
+  spaces?: WidgetSpaceConfig
+}
+
+export interface WidgetSpaceConfig {
+  showSpaceInHeader?: boolean
+  displayChannelOrigin?: boolean
+  allowSpaceSwitching?: boolean
+  spaceIndicatorStyle?: 'minimal' | 'detailed' | 'hidden'
 }
 
 export interface UserDetails {
@@ -73,6 +212,16 @@ export interface ChatSession {
   lastActivity: string
   conversationCount: number
   isReturningUser: boolean
+  // Space-related session information
+  spaceContext?: SpaceSessionContext
+}
+
+export interface SpaceSessionContext {
+  communicationChannelId: string    // 'web-chat', 'telegram', 'facebook'
+  channelSpaceId?: string          // Communication channel space ID
+  departmentSpaceId?: string       // Department-specific space ID
+  rootSpaceId?: string             // Root space ID
+  spaceHierarchy?: string[]        // Array of space IDs from root to room
 }
 
 export interface ChatState {
@@ -100,9 +249,11 @@ export interface MatrixChatWidgetProps {
     departments?: Department[]
     matrix?: MatrixConfig  // Fallback for legacy mode
     widget: WidgetConfig
+    spaces?: SpacesConfiguration  // Optional spaces configuration
   }
   onError?: (error: Error) => void
   onConnect?: (roomId: string, department?: Department) => void
   onMessage?: (message: ChatMessage) => void
   onDepartmentSelect?: (department: Department) => void
+  onSpaceContext?: (context: SpaceSessionContext) => void
 }

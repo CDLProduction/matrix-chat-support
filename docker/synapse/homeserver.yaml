@@ -1,4 +1,7 @@
 # Configuration file for Synapse.
+# 
+# Matrix Spaces Support: This configuration supports Matrix Spaces (Synapse 1.31+)
+# Spaces are enabled by default in modern Synapse versions
 
 # Server
 server_name: "localhost"
