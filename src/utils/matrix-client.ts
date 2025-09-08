@@ -67,7 +67,7 @@ export class MatrixChatClient {
   /**
    * Organize newly created room in Matrix Spaces hierarchy
    */
-  private async organizeRoomInSpaces(roomId: string, departmentInfo?: { name: string; id: string }): Promise<SpaceSessionContext | null> {
+  private async organizeRoomInSpaces(roomId: string, departmentInfo?: { name: string; id: string }, botClient?: MatrixClient): Promise<SpaceSessionContext | null> {
     if (!this.spaceManager) {
       console.log('[MatrixClient] SpaceManager not available, skipping space organization')
       return null
@@ -87,8 +87,16 @@ export class MatrixChatClient {
         widget: {}
       }
 
-      // Resolve appropriate space context for this room (defaults to web-chat channel)
-      const spaceContext = await this.spaceManager.resolveSpaceForRoom(department, 'web-chat')
+      // Use bot client for space operations if available, otherwise use guest client
+      const clientForSpaces = botClient || this.client
+      
+      // Temporarily replace the SpaceManager's client for space operations
+      const originalClient = this.spaceManager['client']
+      this.spaceManager['client'] = clientForSpaces
+      
+      try {
+        // Resolve appropriate space context for this room (defaults to web-chat channel)
+        const spaceContext = await this.spaceManager.resolveSpaceForRoom(department, 'web-chat')
 
       // Add room to the appropriate space based on department space configuration
       const targetSpaceId = spaceContext.departmentSpaceId || spaceContext.channelSpaceId
@@ -112,7 +120,11 @@ export class MatrixChatClient {
         updateChatSession(updatedSession)
       }
 
-      return spaceContext
+        return spaceContext
+      } finally {
+        // Restore original client
+        this.spaceManager['client'] = originalClient
+      }
     } catch (error) {
       console.error('[MatrixClient] Failed to organize room in spaces:', error)
       // Continue without space organization - don't break room creation
@@ -611,7 +623,7 @@ export class MatrixChatClient {
         this.currentRoomId = response.room_id
 
         // Phase 2: Matrix Spaces Integration - Organize room in space hierarchy
-        await this.organizeRoomInSpaces(this.currentRoomId, departmentInfo)
+        await this.organizeRoomInSpaces(this.currentRoomId, departmentInfo, supportBotClient)
 
         // Store room ID for future sessions
         setRoomId(this.currentRoomId)

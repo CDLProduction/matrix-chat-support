@@ -234,7 +234,8 @@ function buildDepartmentClientConfig() {
         greeting: dept.widget?.greeting,
         placeholderText: dept.widget?.placeholder_text,
         additionalFields: dept.widget?.additional_fields
-      }
+      },
+      spaceConfig: dept.matrix?.spaceConfig
     })),
     widget: {
       title: config.widget.title,

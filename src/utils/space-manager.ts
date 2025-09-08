@@ -359,11 +359,7 @@ export class SpaceManager {
       
       // Try to get room state to verify the space exists and is accessible
       try {
-        const response = await (this.client as any).http.authedRequest(
-          undefined,
-          'GET',
-          `/_matrix/client/v3/rooms/${spaceId}/state/m.room.create`
-        )
+        const response = await this.client.getStateEvent(spaceId, 'm.room.create', '')
         
         // If we get here, the space exists and we have access
         const isSpace = response?.type === 'm.space'

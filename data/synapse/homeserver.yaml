@@ -1,0 +1,81 @@
+# Configuration file for Synapse.
+#
+# This is a YAML file: see [1] for a quick introduction. Note in particular
+# that *indentation is important*: all the elements of a list or dictionary
+# should have the same indentation.
+#
+# [1] https://docs.ansible.com/ansible/latest/reference_appendices/YAMLSyntax.html
+#
+# For more information on how to configure Synapse, including a complete accounting of
+# each option, go to docs/usage/configuration/config_documentation.md or
+# https://element-hq.github.io/synapse/latest/usage/configuration/config_documentation.html
+server_name: "localhost"
+pid_file: /data/homeserver.pid
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: true
+    resources:
+      - names: [client, federation]
+        compress: false
+database:
+  name: sqlite3
+  args:
+    database: /data/homeserver.db
+log_config: "/data/localhost.log.config"
+media_store_path: /data/media_store
+registration_shared_secret: "lR+3l2-ILzJX9QEt7i@:LmPjJr:UU*fEg&g*678L4DVXF1^YAy"
+report_stats: false
+macaroon_secret_key: "=~^,mXZUV.K9Y=1^ay5tXU7ZBaAtrE1.WxjbP3GXeGHKll_qGa"
+form_secret: "xxjCvYCy~1WGUFtZH7_-YsYI,,MVTEs5.7+,Bn0Ot24r8pCyvF"
+signing_key_path: "/data/localhost.signing.key"
+trusted_key_servers:
+  - server_name: "matrix.org"
+
+
+enable_registration: true
+enable_registration_without_verification: true
+
+# Relaxed rate limiting for development
+rc_message:
+  per_second: 100
+  burst_count: 1000
+
+rc_registration:
+  per_second: 10
+  burst_count: 50
+
+rc_login:
+  address:
+    per_second: 10
+    burst_count: 50
+  account:
+    per_second: 10
+    burst_count: 50
+  failed_attempts:
+    per_second: 10
+    burst_count: 50
+
+rc_admin_redaction:
+  per_second: 10
+  burst_count: 50
+
+rc_joins:
+  local:
+    per_second: 10
+    burst_count: 50
+  remote:
+    per_second: 10
+    burst_count: 50
+
+# Enable Matrix Spaces support
+experimental_features:
+  spaces_enabled: true
+  msc1772_enabled: true  # Spaces support
+  msc2716_enabled: true  # Space hierarchy  
+  msc3202_enabled: true  # Space summaries
+  msc2946_enabled: true  # Space directory
+  msc3083_enabled: true  # Restricted room joins
+
+# vim:ft=yaml

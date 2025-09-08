@@ -31,7 +31,13 @@
       "Bash(sudo chown:*)",
       "Bash(chmod:*)",
       "Bash(docker system prune:*)",
-      "Bash(docker volume prune:*)"
+      "Bash(docker volume prune:*)",
+      "Bash(npm:*)",
+      "Bash(docker:*)",
+      "Bash(open:*)",
+      "Bash(./scripts/docker-init.sh:*)",
+      "Bash(./scripts/docker-fix-and-cleanup.sh:*)",
+      "Bash(./scripts/docker-setup-sudo.sh:*)"
     ],
     "deny": [],
     "ask": [],

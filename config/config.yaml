@@ -9,10 +9,14 @@ departments:
     color: "#667eea"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_c3VwcG9ydA_rBNoCezBSscbgSBWJNDe_01H4vC"
-      admin_access_token: "syt_YWRtaW4_BQfxXVPTThskoPUVbrlj_2F4lBY"
+      access_token: "syt_c3VwcG9ydA_fjUIoGXNZwDoAgHcecqy_1r4ai8"
+      admin_access_token: "syt_YWRtaW4_cXQIMpjdxWNbDkXOHEaH_2E3eNz"
       support_room_id: null  # Creates new rooms per conversation
       bot_user_id: "@support:localhost"
+      spaceConfig:
+        channelId: "web-chat"
+        autoCreateDepartmentSpace: true
+        departmentSpaceNaming: "Web-Chat - General Support"
     widget:
       greeting: "Hi! How can our support team help you today?"
       placeholder_text: "Describe your technical issue or question..."
@@ -24,10 +28,14 @@ departments:
     color: "#10b981"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_dGVjaF9zdXBwb3J0_McCliYceMhGwBaqsaJAT_1kwoQ1"
-      admin_access_token: "syt_YWRtaW4_BQfxXVPTThskoPUVbrlj_2F4lBY"
+      access_token: "syt_dGVjaF9zdXBwb3J0_VfrFOEFLvJLOmmcFWStV_2lT33r"
+      admin_access_token: "syt_YWRtaW4_cXQIMpjdxWNbDkXOHEaH_2E3eNz"
       support_room_id: null
       bot_user_id: "@tech_support:localhost"
+      spaceConfig:
+        channelId: "web-chat"
+        autoCreateDepartmentSpace: true
+        departmentSpaceNaming: "Web-Chat - Tech Support"
     widget:
       greeting: "Tech Support here! What technical issue can we resolve?"
       placeholder_text: "Describe your technical issue in detail..."
@@ -39,13 +47,36 @@ departments:
     color: "#f59e0b"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_aWRlbnRpZmljYXRpb24_qaBeBxSYnEVFZTZPzJAi_2U8l15"
-      admin_access_token: "syt_YWRtaW4_BQfxXVPTThskoPUVbrlj_2F4lBY"
+      access_token: "syt_aWRlbnRpZmljYXRpb24_QQfdbqYeHultXmSVHhtQ_3ihVt5"
+      admin_access_token: "syt_YWRtaW4_cXQIMpjdxWNbDkXOHEaH_2E3eNz"
       support_room_id: null
       bot_user_id: "@identification:localhost"
+      spaceConfig:
+        channelId: "web-chat"
+        autoCreateDepartmentSpace: true
+        departmentSpaceNaming: "Web-Chat - Account Verification"
     widget:
       greeting: "We'll help you verify your account securely."
       placeholder_text: "Please describe the account issue you're experiencing..."
+
+  - id: "commerce"
+    name: "Sales & Commerce"
+    description: "Purchase questions and order support"
+    icon: "💰"
+    color: "#8b5cf6"
+    matrix:
+      homeserver: "http://localhost:8008"
+      access_token: "syt_Y29tbWVyY2U_ozgUoGtggxDFbaBCITUT_3ST49X"
+      admin_access_token: "syt_YWRtaW4_cXQIMpjdxWNbDkXOHEaH_2E3eNz"
+      support_room_id: null
+      bot_user_id: "@commerce:localhost"
+      spaceConfig:
+        channelId: "web-chat"
+        autoCreateDepartmentSpace: true
+        departmentSpaceNaming: "Web-Chat - Sales & Commerce"
+    widget:
+      greeting: "Hello! How can we help with your purchase or order?"
+      placeholder_text: "Tell us about your order or purchase inquiry..."
 
 # Legacy Matrix configuration (used as fallback for missing values)
 matrix:
