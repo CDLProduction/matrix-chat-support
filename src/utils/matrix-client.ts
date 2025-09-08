@@ -1,4 +1,4 @@
-import { createClient, MatrixClient, Room, MatrixEvent, RoomEvent, ClientEvent } from 'matrix-js-sdk'
+import { createClient, MatrixClient, Room, MatrixEvent, RoomEvent, ClientEvent, Filter } from 'matrix-js-sdk'
 import { MatrixConfig, ChatMessage, UserDetails, Department, SpaceSessionContext, ChatSession } from '@/types'
 import { getCurrentRoomId, setRoomId, setMatrixUserId, loadChatSession, updateChatSession, getDepartmentRoomId, getAllDepartmentRoomIds, clearDepartmentRoomId, setDepartmentRoomStatus, getDepartmentRoomInfo } from './chat-storage'
 import { getUserFriendlyErrorMessage, logError, isRetryableError, ErrorContext } from './error-handler'
@@ -129,6 +129,64 @@ export class MatrixChatClient {
       console.error('[MatrixClient] Failed to organize room in spaces:', error)
       // Continue without space organization - don't break room creation
       return null
+    }
+  }
+
+  /**
+   * Creates an optimized sync filter for real-time messaging
+   * Reduces sync payload and improves message delivery speed
+   */
+  private createOptimizedSyncFilter(): any {
+    return {
+      room: {
+        timeline: {
+          limit: 10,  // Only sync last 10 messages initially (vs default 20+)
+          types: [
+            'm.room.message',           // Chat messages
+            'm.room.encrypted',         // Encrypted messages
+            'm.room.redaction',         // Message deletions
+            'm.reaction'                // Message reactions
+          ]
+        },
+        state: {
+          types: [
+            'm.room.member',           // Essential for membership
+            'm.room.name',             // Room name changes
+            'm.room.topic',            // Room topic changes
+            'm.room.avatar',           // Room avatar changes
+            'm.room.encryption',       // Encryption state
+            'm.room.power_levels',     // Permissions (minimal)
+            'm.room.join_rules',       // Join rules (minimal)
+            'm.space.parent',          // Space relationships
+            'm.space.child'            // Space children
+          ],
+          lazy_load_members: true      // Only load members as needed
+        },
+        account_data: {
+          limit: 5,                    // Minimize account data sync
+          types: [
+            'm.fully_read',            // Read markers
+            'm.push_rules'             // Push notification rules
+          ]
+        },
+        ephemeral: {
+          types: [
+            'm.typing',                // Typing indicators
+            'm.receipt'                // Read receipts
+          ]
+        }
+      },
+      presence: {
+        types: [],                     // Disable presence for performance
+        limit: 0
+      },
+      account_data: {
+        limit: 5,                      // Minimal global account data
+        types: [
+          'm.push_rules',              // Push rules only
+          'm.ignored_user_list'        // Ignored users
+        ]
+      }
     }
   }
 
@@ -372,7 +430,15 @@ export class MatrixChatClient {
         }
       })
 
-      await this.client.startClient()
+      // Create optimized filter for faster sync
+      const filter = new Filter(this.client.getUserId(), undefined)
+      filter.setDefinition(this.createOptimizedSyncFilter())
+
+      await this.client.startClient({
+        pollTimeout: 10000,  // Reduce from 30s to 10s for faster message delivery
+        filter: filter,      // Use optimized filter for better performance
+        initialSyncLimit: 5  // Limit initial sync to 5 messages per room
+      })
       
       // Mark connection timestamp for timeline event filtering
       this.connectionTimestamp = Date.now()

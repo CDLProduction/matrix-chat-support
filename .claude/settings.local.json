@@ -37,7 +37,8 @@
       "Bash(open:*)",
       "Bash(./scripts/docker-init.sh:*)",
       "Bash(./scripts/docker-fix-and-cleanup.sh:*)",
-      "Bash(./scripts/docker-setup-sudo.sh:*)"
+      "Bash(./scripts/docker-setup-sudo.sh:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": [],
