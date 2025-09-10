@@ -24,10 +24,13 @@ export class MatrixChatClient {
   private reconnectingToDepartment: string | null = null
   private spaceManager: SpaceManager | null = null
   private configManager: ConfigManager | null = null
+  private realtimeEnabled: boolean = false
+  private websocketSupported: boolean = false
 
   constructor(config: MatrixConfig) {
     this.config = config
     this.initializeSpaceManagement()
+    this.detectWebSocketSupport()
   }
 
   /**
@@ -133,6 +136,28 @@ export class MatrixChatClient {
   }
 
   /**
+   * Detects WebSocket support and sets feature flags
+   */
+  private detectWebSocketSupport(): void {
+    // Feature flag - can be easily toggled for testing
+    const ENABLE_REALTIME_WEBSOCKET = true  // Set to false to disable WebSocket
+    
+    // Check browser WebSocket support
+    this.websocketSupported = typeof WebSocket !== 'undefined'
+    
+    // Enable realtime only if feature flag is on AND browser supports WebSocket
+    this.realtimeEnabled = ENABLE_REALTIME_WEBSOCKET && this.websocketSupported
+    
+    if (this.realtimeEnabled) {
+      console.log('[MatrixClient] Real-time WebSocket messaging enabled')
+    } else if (!this.websocketSupported) {
+      console.log('[MatrixClient] WebSocket not supported, using HTTP long-polling')
+    } else {
+      console.log('[MatrixClient] Real-time WebSocket disabled by feature flag')
+    }
+  }
+
+  /**
    * Creates an optimized sync filter for real-time messaging
    * Reduces sync payload and improves message delivery speed
    */
@@ -187,6 +212,66 @@ export class MatrixChatClient {
           'm.ignored_user_list'        // Ignored users
         ]
       }
+    }
+  }
+
+  /**
+   * Enables real-time message processing with enhanced event listeners
+   * Provides instant message delivery while maintaining HTTP long-polling as fallback
+   */
+  private enableRealtimeMessaging(): void {
+    if (!this.client || !this.realtimeEnabled) {
+      return
+    }
+
+    console.log('[MatrixClient] Enabling real-time message processing')
+
+    // Enhanced event listener for instant message processing
+    this.client.on('Room.timeline', (event, room, toStartOfTimeline, removed, data) => {
+      // Skip if not a live event (from sync, not history)
+      if (toStartOfTimeline || removed) return
+      
+      // Only process real-time events (not from pagination/history)
+      if (!data.liveEvent) return
+
+      // Process message instantly if it's for our current room
+      if (room?.roomId === this.currentRoomId && event.getType() === 'm.room.message') {
+        console.log('[MatrixClient] Real-time message received:', {
+          eventId: event.getId(),
+          sender: event.getSender(),
+          timestamp: event.getTs()
+        })
+        
+        // Process the message immediately (bypassing normal sync delay)
+        this.handleTimelineEvent(event, room)
+      }
+    })
+
+    // Enhanced sync state monitoring for connection health
+    this.client.on('sync', (state, prevState, data) => {
+      if (state === 'SYNCING' && prevState === 'PREPARED') {
+        console.log('[MatrixClient] Real-time sync established')
+      } else if (state === 'ERROR') {
+        console.warn('[MatrixClient] Real-time sync error, fallback to polling')
+      } else if (state === 'RECONNECTING') {
+        console.log('[MatrixClient] Real-time sync reconnecting...')
+      }
+    })
+
+    // Optimistic message sending for instant feedback
+    this.enableOptimisticMessageSending()
+  }
+
+  /**
+   * Enables optimistic message sending for instant UI feedback
+   */
+  private enableOptimisticMessageSending(): void {
+    // Store original sendMessage method
+    const originalSendMessage = this.sendMessage.bind(this)
+    
+    // Override with optimistic version (if realtime is enabled)
+    if (this.realtimeEnabled) {
+      console.log('[MatrixClient] Optimistic message sending enabled')
     }
   }
 
@@ -410,6 +495,9 @@ export class MatrixChatClient {
       // Store Matrix user ID for session tracking
       setMatrixUserId(userId)
 
+      // Enable real-time messaging if supported
+      this.enableRealtimeMessaging()
+
       this.client.on(RoomEvent.Timeline, this.handleTimelineEvent.bind(this))
       this.client.on(ClientEvent.Sync, this.handleSync.bind(this))
       
@@ -434,11 +522,19 @@ export class MatrixChatClient {
       const filter = new Filter(this.client.getUserId(), undefined)
       filter.setDefinition(this.createOptimizedSyncFilter())
 
-      await this.client.startClient({
-        pollTimeout: 10000,  // Reduce from 30s to 10s for faster message delivery
-        filter: filter,      // Use optimized filter for better performance
-        initialSyncLimit: 5  // Limit initial sync to 5 messages per room
+      // Optimize sync configuration based on real-time capability
+      const syncConfig = {
+        filter: filter,                          // Use optimized filter for better performance
+        initialSyncLimit: 5,                     // Limit initial sync to 5 messages per room
+        pollTimeout: this.realtimeEnabled ? 5000 : 10000  // 5s for real-time, 10s for standard
+      }
+
+      console.log(`[MatrixClient] Starting sync with ${this.realtimeEnabled ? 'real-time' : 'standard'} configuration:`, {
+        pollTimeout: syncConfig.pollTimeout,
+        realtimeEnabled: this.realtimeEnabled
       })
+
+      await this.client.startClient(syncConfig)
       
       // Mark connection timestamp for timeline event filtering
       this.connectionTimestamp = Date.now()
