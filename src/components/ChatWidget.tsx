@@ -16,6 +16,8 @@ import {
 } from '@/utils/chat-storage'
 import { getUserFriendlyErrorMessage, validateWidgetConfig, logError, isRetryableError } from '@/utils/error-handler'
 import DepartmentSelector from './DepartmentSelector'
+import CommunicationChannelSelector from './CommunicationChannelSelector'
+import SocialMediaIntegration from './SocialMediaIntegration'
 import UserDetailsForm from './UserDetailsForm'
 import ChatInterface from './ChatInterface'
 import styles from '@/styles/widget.module.css'
@@ -27,6 +29,8 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
   const [chatState, setChatState] = useState<ChatState>({
     currentStep: initialStep,
     selectedDepartment: undefined,
+    selectedChannel: undefined,
+    selectedSocialMedia: undefined,
     isOpen: false,
     isConnected: false,
     isLoading: false,
@@ -84,46 +88,87 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
   const handleDepartmentSelect = (department: any) => {
     // Store department selection in persistent storage
     setSelectedDepartment(department)
-    
-    // Check if user already has details (department switching scenario)
-    const hasUserDetails = chatState.session?.userDetails || chatState.userDetails
-    
-    // Check if this department has a previous conversation with THIS department's bot
-    const departmentRoomId = getDepartmentRoomId(department.id)
-    
-    const nextStep = hasUserDetails ? 'chat' : 'user-form'
-    
-    
+
     setChatState(prev => ({
       ...prev,
       selectedDepartment: department,
-      currentStep: nextStep,
-      // IMPORTANT: Only use departmentRoomId if it exists for THIS department
-      // For department switches, create new rooms to avoid permission issues
-      roomId: departmentRoomId || undefined,
-      messages: [], // Start with empty messages, will be loaded if room exists
-      error: undefined,
-      // Ensure userDetails are set if they exist (for department switching)
-      userDetails: hasUserDetails ? (prev.userDetails || prev.session?.userDetails) : prev.userDetails
+      currentStep: 'channel-selection',
+      selectedChannel: undefined,
+      selectedSocialMedia: undefined,
+      error: undefined
     }))
-    
-    // If user has details and we're going to chat, attempt reconnection
-    if (hasUserDetails && nextStep === 'chat') {
-      if (departmentRoomId) {
-        setTimeout(() => attemptReconnection(department, chatState.session!), 1000)
-      } else {
-        // For department switching: user has details but no room for this department
-        // Start chat directly (will create new room with existing user details)
-        setTimeout(() => {
-          const userDetails = hasUserDetails === true ? (chatState.userDetails || chatState.session?.userDetails) : hasUserDetails
-          if (userDetails) {
-            handleStartChatForDepartmentSwitch(userDetails, department)
-          }
-        }, 500)
-      }
-    }
-    
+
     onDepartmentSelect?.(department)
+  }
+
+  // Communication channel selection handler
+  const handleChannelSelect = (channel: any) => {
+    setChatState(prev => ({
+      ...prev,
+      selectedChannel: channel,
+      currentStep: channel.type === 'social' ? 'social-media-setup' : 'user-form',
+      selectedSocialMedia: channel.socialMedia
+    }))
+  }
+
+  // Social media selection handler
+  const handleSocialMediaContinue = () => {
+    // For social media, we close the widget since the user is being redirected
+    setChatState(prev => ({ ...prev, isOpen: false }))
+  }
+
+  // Back navigation handlers
+  const handleBackToDepartments = () => {
+    setChatState(prev => ({
+      ...prev,
+      currentStep: 'department-selection',
+      selectedChannel: undefined,
+      selectedSocialMedia: undefined
+    }))
+  }
+
+  const handleBackToChannels = () => {
+    setChatState(prev => ({
+      ...prev,
+      currentStep: 'channel-selection',
+      selectedSocialMedia: undefined
+    }))
+  }
+
+  // Get available communication channels
+  const getCommunicationChannels = () => {
+    const channels = []
+
+    // Add web chat option
+    channels.push({
+      type: 'web' as const,
+      id: 'web-chat',
+      name: 'Web Chat',
+      description: 'Start a conversation right here in your browser',
+      icon: '💬',
+      color: '#4F46E5',
+      available: true
+    })
+
+    // Add social media channels if configured
+    if (config.socialMedia) {
+      config.socialMedia.forEach(socialChannel => {
+        if (socialChannel.enabled) {
+          channels.push({
+            type: 'social' as const,
+            id: socialChannel.id,
+            name: socialChannel.name,
+            description: `Continue on ${socialChannel.platform}`,
+            icon: socialChannel.icon,
+            color: socialChannel.color,
+            available: true,
+            socialMedia: socialChannel
+          })
+        }
+      })
+    }
+
+    return channels
   }
 
   // Initialize session on component mount
@@ -1007,6 +1052,24 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
                 config={config.widget.departmentSelection || {}}
                 onSelect={handleDepartmentSelect}
                 onClose={handleCloseChat}
+              />
+            )}
+
+            {chatState.currentStep === 'channel-selection' && chatState.selectedDepartment && (
+              <CommunicationChannelSelector
+                channels={getCommunicationChannels()}
+                selectedDepartment={chatState.selectedDepartment}
+                onChannelSelect={handleChannelSelect}
+                onBack={handleBackToDepartments}
+              />
+            )}
+
+            {chatState.currentStep === 'social-media-setup' && chatState.selectedSocialMedia && chatState.selectedDepartment && (
+              <SocialMediaIntegration
+                channel={chatState.selectedSocialMedia}
+                department={chatState.selectedDepartment}
+                onClose={handleCloseChat}
+                onBack={handleBackToChannels}
               />
             )}
 

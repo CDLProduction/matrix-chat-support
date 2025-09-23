@@ -37,7 +37,7 @@ spaces:
       topic: "Customer conversations from Telegram integration"
       parentSpaceId: null  # Will be set to rootSpace ID after creation
       visibility: "private"
-      enabled: false  # Future implementation
+      enabled: true  # Now implemented
       
     - id: facebook
       name: "Facebook"
@@ -98,11 +98,26 @@ departmentSpaces:
       # Auto-archive old rooms after N days
       autoArchiveAfterDays: 90
       
-  # Future: telegram department configuration
+  # Telegram department configuration - Private messaging with puppeting
   telegram:
-    autoCreateDepartmentSpaces: false
+    autoCreateDepartmentSpaces: true
     visibility: "private"
-    roomNamingPattern: "{userName} (Telegram) - {departmentName} #{conversationId}"
+    roomNamingPattern: "{telegramUsername} (Telegram) - {departmentName} #{conversationId}"
+    
+    # Puppeting configuration for direct messaging
+    puppeting:
+      enabled: true
+      # Support team members log into their own Telegram accounts
+      supportTeamAccounts:
+        - telegramUserId: null  # Will be configured per support team member
+          matrixUserId: "@support:localhost"
+          departmentIds: ["general", "tech", "verification", "commerce"]
+      
+      # Private messaging flow (no groups created)
+      messagingMode: "private"  # private, group, channel
+      
+      # Direct bot conversations bridge to Matrix rooms
+      bridgeMode: "direct"  # direct, relay, puppet
     
   # Future: facebook department configuration  
   facebook:

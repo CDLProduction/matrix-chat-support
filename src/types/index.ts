@@ -226,8 +226,10 @@ export interface SpaceSessionContext {
 
 export interface ChatState {
   // Navigation state
-  currentStep: 'department-selection' | 'user-form' | 'chat'
+  currentStep: 'department-selection' | 'channel-selection' | 'social-media-setup' | 'user-form' | 'chat'
   selectedDepartment?: Department
+  selectedChannel?: CommunicationChannelOption
+  selectedSocialMedia?: SocialMediaChannel
   
   // Existing state
   isOpen: boolean
@@ -244,16 +246,73 @@ export interface ChatState {
   matrixClient?: any
 }
 
+// Social Media Integration Types
+export interface SocialMediaChannel {
+  id: string
+  name: string
+  platform: 'telegram' | 'whatsapp' | 'facebook' | 'twitter' | 'instagram'
+  icon: string
+  color: string
+  enabled: boolean
+  config: SocialMediaConfig
+}
+
+export interface SocialMediaConfig {
+  // Telegram specific
+  botUsername?: string
+  botToken?: string
+  departments?: SocialMediaDepartmentMapping[]
+
+  // General config
+  welcomeMessage?: string
+  autoReply?: boolean
+  workingHours?: WorkingHours
+}
+
+export interface SocialMediaDepartmentMapping {
+  departmentId: string
+  command: string
+  channelSpecific?: boolean
+}
+
+export interface WorkingHours {
+  enabled: boolean
+  timezone: string
+  schedule: DaySchedule[]
+  offHoursMessage?: string
+}
+
+export interface DaySchedule {
+  day: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
+  start: string // HH:mm format
+  end: string   // HH:mm format
+  enabled: boolean
+}
+
+export interface CommunicationChannelOption {
+  type: 'web' | 'social'
+  id: string
+  name: string
+  description: string
+  icon: string
+  color: string
+  available: boolean
+  socialMedia?: SocialMediaChannel
+}
+
 export interface MatrixChatWidgetProps {
   config: {
     departments?: Department[]
     matrix?: MatrixConfig  // Fallback for legacy mode
     widget: WidgetConfig
     spaces?: SpacesConfiguration  // Optional spaces configuration
+    socialMedia?: SocialMediaChannel[]  // Social media integration
+    communicationChannels?: CommunicationChannelOption[]  // Channel selection
   }
   onError?: (error: Error) => void
   onConnect?: (roomId: string, department?: Department) => void
   onMessage?: (message: ChatMessage) => void
   onDepartmentSelect?: (department: Department) => void
   onSpaceContext?: (context: SpaceSessionContext) => void
+  onSocialMediaSelect?: (channel: SocialMediaChannel, department: Department) => void
 }

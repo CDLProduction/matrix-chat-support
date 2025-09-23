@@ -1,81 +1,158 @@
 # Configuration file for Synapse.
-#
-# This is a YAML file: see [1] for a quick introduction. Note in particular
-# that *indentation is important*: all the elements of a list or dictionary
-# should have the same indentation.
-#
-# [1] https://docs.ansible.com/ansible/latest/reference_appendices/YAMLSyntax.html
-#
-# For more information on how to configure Synapse, including a complete accounting of
-# each option, go to docs/usage/configuration/config_documentation.md or
-# https://element-hq.github.io/synapse/latest/usage/configuration/config_documentation.html
+# 
+# Matrix Spaces Support: This configuration supports Matrix Spaces (Synapse 1.31+)
+# Spaces are enabled by default in modern Synapse versions
+
+# Server
 server_name: "localhost"
+report_stats: false
 pid_file: /data/homeserver.pid
+web_client_location: http://localhost:8081/
+public_baseurl: http://localhost:8008/
+
+# Ports
 listeners:
   - port: 8008
     tls: false
     type: http
     x_forwarded: true
+    bind_addresses: ['0.0.0.0']
+
     resources:
       - names: [client, federation]
         compress: false
+
+# Database
 database:
-  name: sqlite3
+  name: psycopg2
   args:
-    database: /data/homeserver.db
+    user: synapse
+    password: synapse_password
+    database: synapse
+    host: postgres
+    port: 5432
+    cp_min: 5
+    cp_max: 10
+
+# Redis
+redis:
+  enabled: true
+  host: redis
+  port: 6379
+
+# Logging
 log_config: "/data/localhost.log.config"
+
+# Media Store
 media_store_path: /data/media_store
-registration_shared_secret: "lR+3l2-ILzJX9QEt7i@:LmPjJr:UU*fEg&g*678L4DVXF1^YAy"
-report_stats: false
-macaroon_secret_key: "=~^,mXZUV.K9Y=1^ay5tXU7ZBaAtrE1.WxjbP3GXeGHKll_qGa"
-form_secret: "xxjCvYCy~1WGUFtZH7_-YsYI,,MVTEs5.7+,Bn0Ot24r8pCyvF"
+max_upload_size: 50M
+max_image_pixels: 32M
+
+# Registration
+enable_registration: true
+enable_registration_without_verification: true
+registration_shared_secret: "2723b07466ecea83566a9b54ebc9bf1eeaddb7f39ef6f8b438776b30a8e1acb9"
+
+# Security
+macaroon_secret_key: "CHANGE_ME_MACAROON_SECRET_67890"
+form_secret: "CHANGE_ME_FORM_SECRET_ABCDEF"
+
+# Federation
+federation_domain_whitelist: []
+allow_public_rooms_without_auth: true
+allow_public_rooms_over_federation: true
+
+# Signing Keys
 signing_key_path: "/data/localhost.signing.key"
+
+# Trusted key servers
 trusted_key_servers:
   - server_name: "matrix.org"
 
+# Application Services
+app_service_config_files:
+  - /data/registration.yaml
 
-enable_registration: true
-enable_registration_without_verification: true
+# TURN/STUN for VoIP (optional)
+# turn_uris: []
+# turn_shared_secret: ""
+# turn_user_lifetime: 1h
+# turn_allow_guests: true
 
-# Relaxed rate limiting for development
+# Email (optional - for password reset, notifications)
+# email:
+#   smtp_host: "localhost"
+#   smtp_port: 25
+#   smtp_user: ""
+#   smtp_pass: ""
+#   notif_from: "Your Matrix Server <noreply@localhost>"
+
+# Push notifications
+push:
+  include_content: true
+
+# Metrics (optional)
+enable_metrics: false
+
+# User directory
+user_directory:
+  enabled: true
+  search_all_users: true
+
+# Rooms
+room_list_publication_rules:
+  - user_id: "*"
+    alias: "*"
+    room_id: "*"
+    action: allow
+
+# Admin contact
+admin_contact: 'mailto:admin@localhost'
+
+# Experimental features
+experimental_features:
+  spaces_enabled: true
+
+# Auto-join rooms (optional)
+# auto_join_rooms:
+#   - "#welcome:localhost"
+
+# URL previews
+url_preview_enabled: true
+url_preview_ip_range_blacklist:
+  - '127.0.0.0/8'
+  - '10.0.0.0/8'
+  - '172.16.0.0/12'
+  - '192.168.0.0/16'
+  - '100.64.0.0/10'
+  - '169.254.0.0/16'
+  - '::1/128'
+  - 'fe80::/64'
+  - 'fc00::/7'
+
+# App services (for bridges, bots, etc.)
+# Configuration moved to line 73-74
+
+# Rate limiting
 rc_message:
-  per_second: 100
-  burst_count: 1000
+  per_second: 0.2
+  burst_count: 10
 
 rc_registration:
-  per_second: 10
-  burst_count: 50
+  per_second: 0.17
+  burst_count: 3
 
 rc_login:
   address:
-    per_second: 10
-    burst_count: 50
+    per_second: 0.17
+    burst_count: 3
   account:
-    per_second: 10
-    burst_count: 50
+    per_second: 0.17
+    burst_count: 3
   failed_attempts:
-    per_second: 10
-    burst_count: 50
+    per_second: 0.17
+    burst_count: 3
 
-rc_admin_redaction:
-  per_second: 10
-  burst_count: 50
-
-rc_joins:
-  local:
-    per_second: 10
-    burst_count: 50
-  remote:
-    per_second: 10
-    burst_count: 50
-
-# Enable Matrix Spaces support
-experimental_features:
-  spaces_enabled: true
-  msc1772_enabled: true  # Spaces support
-  msc2716_enabled: true  # Space hierarchy  
-  msc3202_enabled: true  # Space summaries
-  msc2946_enabled: true  # Space directory
-  msc3083_enabled: true  # Restricted room joins
-
-# vim:ft=yaml
+# Account validity
+# account_validity:
+#   enabled: false

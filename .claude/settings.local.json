@@ -38,7 +38,9 @@
       "Bash(./scripts/docker-init.sh:*)",
       "Bash(./scripts/docker-fix-and-cleanup.sh:*)",
       "Bash(./scripts/docker-setup-sudo.sh:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebFetch(domain:docs.mau.fi)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": [],

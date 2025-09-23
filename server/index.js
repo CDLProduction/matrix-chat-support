@@ -216,7 +216,7 @@ function buildLegacyClientConfig() {
 }
 
 function buildDepartmentClientConfig() {
-  return {
+  const baseConfig = {
     departments: config.departments.map(dept => ({
       id: dept.id,
       name: dept.name,
@@ -245,6 +245,52 @@ function buildDepartmentClientConfig() {
       departmentSelection: config.widget.department_selection
     }
   }
+
+  // Add social media configuration if available
+  if (config.social_media && Array.isArray(config.social_media) && config.social_media.length > 0) {
+    baseConfig.socialMedia = config.social_media.map(social => ({
+      id: social.id,
+      name: social.name,
+      platform: social.platform,
+      icon: social.icon,
+      color: social.color,
+      enabled: social.enabled,
+      config: {
+        botUsername: social.config?.bot_username,
+        welcomeMessage: social.config?.welcome_message,
+        autoReply: social.config?.auto_reply,
+        departments: social.config?.departments,
+        workingHours: social.config?.working_hours
+      }
+    }))
+  }
+
+  // Add communication channels configuration if available
+  if (config.communication_channels && Array.isArray(config.communication_channels) && config.communication_channels.length > 0) {
+    baseConfig.communicationChannels = config.communication_channels.map(channel => {
+      const baseChannel = {
+        type: channel.type,
+        id: channel.id,
+        name: channel.name,
+        description: channel.description,
+        icon: channel.icon,
+        color: channel.color,
+        available: channel.available
+      }
+
+      // If it's a social media channel, add the social media details
+      if (channel.type === 'social' && channel.social_media_id && baseConfig.socialMedia) {
+        const socialMedia = baseConfig.socialMedia.find(s => s.id === channel.social_media_id)
+        if (socialMedia) {
+          baseChannel.socialMedia = socialMedia
+        }
+      }
+
+      return baseChannel
+    })
+  }
+
+  return baseConfig
 }
 
 app.get('/api/config', (req, res) => {

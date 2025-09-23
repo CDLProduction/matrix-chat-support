@@ -90,12 +90,39 @@ services:
       - matrix-network
     restart: unless-stopped
 
+  # Mautrix Telegram Bridge with Puppeting Support
+  mautrix-telegram:
+    image: dock.mau.dev/mautrix/telegram:latest
+    container_name: mautrix-telegram
+    depends_on:
+      synapse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - UID=1000
+      - GID=1000
+    volumes:
+      - ./data/mautrix-telegram:/data
+      - ./config/mautrix-telegram:/config:ro
+    networks:
+      - matrix-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import requests; requests.get(\"http://localhost:8080/_matrix/mau/live\")' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
 volumes:
   postgres_data:
     driver: local
   redis_data:
     driver: local
   synapse_data:
+    driver: local
+  mautrix_telegram_data:
     driver: local
 
 networks:
