@@ -6,6 +6,9 @@ A modern, embeddable chat support widget that integrates with Matrix/Synapse ser
 
 - **Easy Integration**: Single script tag embedding
 - **Matrix/Synapse Compatible**: Works with any Matrix homeserver
+- **Multi-Department Support**: Route conversations to specialized teams
+- **Matrix Spaces Integration**: Hierarchical organization of conversations
+- **Telegram Bridge**: Seamless Telegram-Matrix message bridging
 - **Professional UI**: Modern chat interface with responsive design
 - **Chat History Persistence**: Maintains conversations across browser sessions
 - **Demo Mode**: Fully functional without Matrix server setup
@@ -16,7 +19,10 @@ A modern, embeddable chat support widget that integrates with Matrix/Synapse ser
 ## 📋 Prerequisites
 
 - **Node.js 18+**: For building and running the server
-- **Matrix Homeserver**: Access to Matrix/Synapse server with bot account
+- **Python 3.13+**: For Telegram bridge functionality
+- **Matrix Homeserver**: Access to Matrix/Synapse server with bot accounts
+- **Telegram Bot**: Bot token and API credentials for Telegram integration
+- **mautrix-telegram**: Bridge for seamless Telegram-Matrix integration (optional)
 - **Web Server**: Apache2 or Nginx for production (optional)
 
 ## 🛠️ Technology Stack
@@ -24,20 +30,31 @@ A modern, embeddable chat support widget that integrates with Matrix/Synapse ser
 - **Frontend**: React 18 + TypeScript + Vite + CSS Modules
 - **Backend**: Node.js/Express with YAML configuration
 - **Matrix**: Matrix JS SDK for protocol communication
+- **Telegram Integration**: Python-based bridge with Telethon/python-telegram-bot
+- **Bridge Architecture**: mautrix-telegram compatible with department routing
 
 ## 📁 Key Structure
 
 ```
 matrix-chat-support/
-├── src/                    # Source code
-│   ├── components/         # React components (ChatWidget, etc.)
-│   ├── utils/             # Matrix client & chat storage
+├── src/                    # Frontend source code
+│   ├── components/         # React components (ChatWidget, DepartmentSelector, etc.)
+│   ├── utils/             # Matrix client, chat storage, space management
 │   ├── styles/            # CSS modules
 │   └── types/             # TypeScript definitions
-├── server/                # Express API server
-├── config/                # Configuration files
-├── scripts/               # Setup & deployment scripts
+├── server/                # Express API server (Node.js)
+├── config/                # YAML configuration files
+│   ├── config.yaml        # Multi-department configuration
+│   ├── spaces.yaml        # Matrix Spaces configuration
+│   └── telegram-router.yaml # Telegram bridge configuration
+├── scripts/               # Setup, deployment & Telegram bridge scripts
+│   ├── telegram-department-bot.py     # Telegram department router
+│   ├── telegram-department-router.py  # Telegram message bridge
+│   ├── docker-setup.sh               # Docker environment setup
+│   └── requirements.txt               # Python dependencies
 ├── docker/                # Docker development environment
+├── telegram_env/          # Python virtual environment for Telegram bridge
+├── data/                  # Runtime data and configurations
 └── examples/              # Integration examples
 ```
 
@@ -68,6 +85,11 @@ widget:
 ```bash
 npm run dev      # Demo at http://localhost:3000
 npm run serve    # API at http://localhost:3001
+
+# Telegram Bridge (optional)
+source telegram_env/bin/activate
+pip install -r scripts/requirements.txt
+python scripts/telegram-department-bot.py
 ```
 
 ### 4. Production
@@ -121,11 +143,37 @@ fetch('/api/config')
 
 ### Configuration Options
 ```yaml
+# Multi-department configuration
+departments:
+  - id: "support"
+    name: "General Support"
+    description: "Technical help and general inquiries"
+    icon: "🎧"
+    color: "#667eea"
+    matrix:
+      homeserver: "http://localhost:8008"
+      access_token: "syt_xxx..."
+      bot_user_id: "@support:localhost"
+    widget:
+      greeting: "Hi! How can our support team help you today?"
+
 widget:
-  title: "Support Chat"
-  brand_color: "#667eea"  
+  title: "Customer Support"
+  brand_color: "#667eea"
   position: "bottom-right"  # bottom-right, bottom-left, top-right, top-left
-  greeting: "Hi! How can we help?"
+  department_selection:
+    title: "How can we help you today?"
+    layout: "grid"
+
+# Social Media Integration
+social_media:
+  - id: "telegram_support"
+    name: "Telegram Bot"
+    platform: "telegram"
+    enabled: true
+    config:
+      bot_username: "YourSupportBot"
+      bot_token: "YOUR_BOT_TOKEN"
 ```
 
 ## ✨ Key Features
@@ -357,3 +405,153 @@ MIT License - See LICENSE file for details.
 - Preserves conversation history across department visits
 - Provides seamless user experience with "Welcome back" messaging
 - Reduces server load by reusing existing rooms
+
+## 🤖 Telegram Integration ✅
+
+**Complete Telegram bridge integration using mautrix-telegram for customer support workflow.**
+
+### Architecture Overview
+- **Matrix Homeserver**: Synapse v1.113.0 with PostgreSQL backend
+- **Telegram Bridge**: mautrix-telegram v0.15.1 with relaybot functionality
+- **Support Bot**: @QWMatrixTestBot (@8497512931:localhost) handles incoming messages
+- **Support Team**: @support:localhost gets auto-invited to customer conversations
+- **Workflow**: Customer → Telegram Bot → Matrix Room → Support Team Response
+
+### Key Components
+
+#### 1. Docker Environment
+**Complete development stack with auto-configuration:**
+```yaml
+services:
+  postgres: PostgreSQL 15 (Bridge + Synapse database)
+  synapse: Matrix Synapse v1.113.0
+  synapse-admin: Web admin interface (port 8080)
+  element: Matrix web client (port 8081)
+  mautrix-telegram: Telegram bridge v0.15.1 (port 29317)
+```
+
+**Management Commands:**
+```bash
+./scripts/docker-setup.sh    # Automated complete setup
+docker compose up -d          # Start all services
+docker compose down           # Stop services (preserve data)
+docker compose down -v        # Clean reset (delete data)
+```
+
+#### 2. Telegram Bot Configuration
+**Created and configured @QWMatrixTestBot via @BotFather:**
+- **Bot Token**: `8497512931:AAGddNooUhvamOws_7ohRTQRgAulQPs9jGM`
+- **Username**: @QWMatrixTestBot
+- **Purpose**: Customer support message relay to Matrix
+- **Permissions**: Can receive messages from any user
+
+#### 3. Bridge Configuration (`mautrix-telegram/config.yaml`)
+**Critical settings that made it work:**
+
+```yaml
+telegram:
+  api_id: 22451908                    # Telegram App API credentials
+  api_hash: 40f6de1fd19af98c0b60c364a30d5fa9
+  bot_token: 8497512931:AAGddNooUhvamOws_7ohRTQRgAulQPs9jGM
+
+permissions:
+  '*': relaybot                       # All users can use relaybot
+  '@support:localhost': puppeting     # Support team can login with phone
+
+relaybot:
+  private_chat:
+    invite: ['@support:localhost']    # Auto-invite support to new chats
+    state_changes: true               # Bridge join/leave messages
+    message: "Welcome to support! A team member will assist you shortly."
+  authless_portals: true             # Allow portal creation from Telegram
+  ignore_own_incoming_events: false  # Process bot's own messages
+```
+
+#### 4. Matrix User Setup
+**Auto-created users with proper permissions:**
+- **@admin:localhost** - Bridge administrator (password: admin)
+- **@support:localhost** - Support team member (password: support123)
+- **Bridge Bot**: @-rdwGc1AHjr5oR_t19LLtInpjyxyAKZDavB7UW0G6emTrh3IdX_mlQY4sKsN65WX:localhost
+
+#### 5. Database Configuration
+**Separate databases for optimal performance:**
+- **Synapse Database**: `postgres://synapse_user:synapse_password@postgres/synapse`
+- **Bridge Database**: `postgres://synapse_user:synapse_password@postgres/mautrix_telegram`
+
+### What Made It Work ✅
+
+#### Critical Fix #1: Bridge Registration
+**Problem**: Bridge not registered with Synapse homeserver
+**Solution**: Generated and configured proper registration file
+```yaml
+# data/mautrix-telegram-registration.yaml
+id: telegram
+as_token: qW_kGRNfUrQdtjqKwOcxbmfsAUnL9jPg0BE0lR0HMBpfz00GdBtGRNH-f1Xp-CAp
+hs_token: 9Z2ZAKTz1gW-Gnb-jfiG0fFs_hDJ-UavWJkEffYmhE00Z6vQAJJqWz3T4O9Xx3VI
+sender_localpart: -rdwGc1AHjr5oR_t19LLtInpjyxyAKZDavB7UW0G6emTrh3IdX_mlQY4sKsN65WX
+```
+
+#### Critical Fix #2: Support User Authentication
+**Problem**: Support user had insufficient permissions to enable puppeting
+**Solution**: Changed permissions from 'user' to 'puppeting' level
+```yaml
+permissions:
+  '@support:localhost': puppeting  # Changed from 'user' to 'puppeting'
+```
+
+#### Critical Fix #3: Relaybot Message Processing
+**Problem**: Bridge ignoring its own bot messages due to configuration
+**Solution**: Enabled bot message processing
+```yaml
+relaybot:
+  ignore_own_incoming_events: false  # Changed from true to false
+```
+
+#### Critical Fix #4: User Login and Session Management
+**Process**: Support user logged in through Matrix bridge management room
+1. Support user accessed bridge management room (!PSSHaprZDMTBjOVNSm:localhost)
+2. Executed `login` command in management room
+3. Provided phone number (+37361174524) for Telegram authentication
+4. Entered SMS verification code
+5. Successfully logged in as @CristianSW_JV on Telegram
+
+### Current Working Workflow ✅
+
+#### Customer Journey:
+1. **Customer sends message** to @QWMatrixTestBot on Telegram
+2. **Bridge creates portal room** in Matrix (format: !xxxxx:localhost)
+3. **Support gets auto-invited** to the portal room
+4. **Conversation appears** in Matrix with customer details
+5. **Support responds** through Matrix interface
+6. **Messages appear from bot** in Telegram (maintaining professional appearance)
+
+#### Support Team Benefits:
+- **Single Matrix interface** for all customer conversations
+- **Professional bot identity** - customers see responses from @QWMatrixTestBot
+- **Auto-invitation** to new customer conversations
+- **Message history** preserved in Matrix rooms
+- **No Telegram app required** - work entirely through Matrix/Element
+
+#### Technical Features:
+- **Real-time messaging** with instant delivery both directions
+- **Media support** - images, documents, stickers bridged properly
+- **User management** - automatic puppet creation for Telegram users
+- **Room management** - automatic portal room creation and invitation
+- **Error handling** - graceful fallbacks and error reporting
+
+### Deployment Status ✅
+- **✅ Bridge Active**: mautrix-telegram running and processing messages
+- **✅ Bot Functional**: @QWMatrixTestBot receiving and relaying messages
+- **✅ Support Ready**: @support:localhost authenticated and responsive
+- **✅ Portal Creation**: New conversations automatically create Matrix rooms
+- **✅ Auto-Invitation**: Support team automatically invited to new conversations
+- **✅ Message Flow**: Bidirectional message relay working perfectly
+
+### Next Steps for Enhancement
+- Polish conversation management and user experience
+- Implement department-specific routing
+- Add advanced message formatting and features
+- Configure production deployment settings
+- Optimize performance for high-volume support scenarios
+
+**🎉 Result**: Complete working Telegram-to-Matrix customer support bridge with professional bot interface and seamless support team integration!

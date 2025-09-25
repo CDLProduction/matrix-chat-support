@@ -1,75 +1,285 @@
-# Dependencies
-node_modules/
-.pnp
-.pnp.js
+# Matrix Chat Support Widget - Optimized .gitignore
 
-# Production builds
-/dist/
-/build/
-
-# Development
+# =============================================================================
+# SYSTEM FILES
+# =============================================================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# =============================================================================
+# SENSITIVE DATA & SECRETS
+# =============================================================================
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Secrets and tokens
+*secret*
+*token*
+*key*
+*password*
+*.pem
+*.p12
+*.pfx
+
+# Configuration files with secrets
+config.yaml
+registration.yaml
+homeserver.yaml
+
+# =============================================================================
+# MATRIX & SYNAPSE DATA
+# =============================================================================
+# Synapse data directory (contains sensitive data)
+/data/
+!/data/.gitkeep
+
+# Matrix database files
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Synapse logs
 *.log
+*.log.*
+homeserver.log*
+
+# Media store
+media_store/
+uploads/
+
+# =============================================================================
+# TELEGRAM BRIDGE DATA
+# =============================================================================
+# Telegram sessions (contain auth data)
+*.session
+*.session-journal
+session.dat
+
+# Bridge database and state
+crypto_store.db*
+state_groups*.db*
+mautrix_telegram.db*
+
+# Telegram media cache
+telegram_cache/
+
+# =============================================================================
+# DEVELOPMENT
+# =============================================================================
+# Node.js
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-lerna-debug.log*
+.npm
+.yarn-integrity
+package-lock.json
+yarn.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+telegram_env/
+matrix_env/
+.venv/
+
+# Python package management
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# =============================================================================
+# BUILD & DEPLOYMENT
+# =============================================================================
+# Build outputs
+/dist/
+/build/
+/public/build/
+*.tgz
+*.tar.gz
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# =============================================================================
+# IDE & EDITORS
+# =============================================================================
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# JetBrains
+.idea/
+*.swp
+*.swo
+*~
+
+# Vim
+*.swp
+*.swo
+*.tmp
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
+*.sublime-workspace
+*.sublime-project
+
+# =============================================================================
+# TEMPORARY & CACHE FILES
+# =============================================================================
+# General
+tmp/
+temp/
+.tmp/
+.cache/
+
+# Claude Code specific
+/.claude/
+
+# macOS specific
+.AppleDouble
+.LSOverride
+
+# =============================================================================
+# MATRIX SPECIFIC EXCLUDES
+# =============================================================================
+# Synapse specific
+signing.key
+*.log.config
+*.yaml.j2
+
+# mautrix-telegram specific
+registration.yaml
+config.yaml
+crypto_store/
+state_store/
+
+# Element/Riot specific
+riot.im/
+element/
+config.json
+
+# =============================================================================
+# WHAT TO KEEP (EXPLICIT INCLUDES)
+# =============================================================================
+# Keep example and template files
+!*.example
+!*.template
+!*.sample
+
+# Keep documentation
+!README.md
+!CLAUDE.md
+!ARCHITECTURE.md
+!docs/
+!examples/
+
+# Keep scripts (but not logs they generate)
+!scripts/
+scripts/*.log
+
+# Keep source code
+!src/
+!server/
+
+# Keep Docker configuration
+!docker-compose.yml
+!Dockerfile*
+!docker/
+
+# Keep package files (but not lock files)
+!package.json
+!requirements.txt
+!pyproject.toml
+
+# =============================================================================
+# PROJECT SPECIFIC
+# =============================================================================
+# Widget build artifacts
+widget/dist/
+widget/build/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Logs
+logs/
+*.log
 
 # Runtime data
-pids
+pids/
 *.pid
 *.seed
 *.pid.lock
 
-# Coverage directory used by tools like istanbul
-coverage/
-*.lcov
-
-# nyc test coverage
-.nyc_output
-
-# Dependency directories
-.npm
-.pnpm-debug.log*
-
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Editor directories and files
-.vscode/
-!.vscode/extensions.json
-.idea
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Temporary files
-*.tmp
-*.temp
-
-# OS generated files
-Thumbs.db
-.DS_Store
-
-# Production configuration (may contain secrets)
-config/config.prod.yaml
-config/config.production.yaml
-
-# PM2 logs
-logs/
-*.log
-
-# SSL certificates (if stored locally)
-*.crt
-*.key
-*.pem
-
-# Cache directories
-.cache/
-.parcel-cache/
+# =============================================================================
+# SECURITY NOTE
+# =============================================================================
+# This .gitignore protects sensitive data including:
+# - Database files with user data and encryption keys
+# - Configuration files with API tokens and secrets
+# - Telegram session files with authentication data
+# - Matrix homeserver private keys and certificates
+# - Docker volumes and persistent data
+#
+# NEVER commit real tokens, passwords, or private keys to git!
+# Use environment variables or secure secret management instead.

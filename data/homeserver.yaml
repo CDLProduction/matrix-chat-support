@@ -20,9 +20,15 @@ listeners:
       - names: [client, federation]
         compress: false
 database:
-  name: sqlite3
+  name: psycopg2
   args:
-    database: /data/homeserver.db
+    user: synapse_user
+    password: synapse_password
+    database: synapse
+    host: postgres
+    port: 5432
+    cp_min: 5
+    cp_max: 10
 log_config: "/data/localhost.log.config"
 media_store_path: /data/media_store
 registration_shared_secret: ":_XM;,E=us1#ko2BCfsmm+dGCN:1fj2Bo_Ht=uV^&k@.kol6YP"
@@ -33,5 +39,37 @@ signing_key_path: "/data/localhost.signing.key"
 trusted_key_servers:
   - server_name: "matrix.org"
 
+# Enable registration for development and testing
+enable_registration: true
+enable_registration_without_verification: true
+
+# Allow guest access for widget functionality
+allow_guest_access: true
+
+# App service configuration for bridges
+app_service_config_files:
+  - /data/mautrix-telegram-registration.yaml
+
+# Experimental features for spaces support
+experimental_features:
+  spaces_enabled: true
+  msc3440_enabled: true
+
+# Relaxed rate limiting for development
+rc_message:
+  per_second: 10
+  burst_count: 50
+
+rc_registration:
+  per_second: 1.0
+  burst_count: 10
+
+rc_login:
+  address:
+    per_second: 1.0
+    burst_count: 10
+  account:
+    per_second: 1.0
+    burst_count: 10
 
 # vim:ft=yaml

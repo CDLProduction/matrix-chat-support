@@ -1,133 +1,70 @@
+version: '3.8'
+
 services:
-  # PostgreSQL database for Synapse
   postgres:
-    image: postgres:15-alpine
-    container_name: matrix-postgres
+    image: postgres:15
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: synapse
-      POSTGRES_USER: synapse
+      POSTGRES_USER: synapse_user
       POSTGRES_PASSWORD: synapse_password
-      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      POSTGRES_DB: synapse
+      POSTGRES_INITDB_ARGS: --encoding=UTF-8 --lc-collate=C --lc-ctype=C
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - matrix-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - synapse_net
 
-  # Redis for Synapse caching
-  redis:
-    image: redis:7-alpine
-    container_name: matrix-redis
-    command: redis-server --save 60 1 --loglevel warning
-    volumes:
-      - redis_data:/data
-    networks:
-      - matrix-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Matrix Synapse homeserver
   synapse:
-    image: matrixdotorg/synapse:latest
-    container_name: matrix-synapse
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      - SYNAPSE_SERVER_NAME=localhost
-      - SYNAPSE_REPORT_STATS=no
-      - UID=1000
-      - GID=1000
-    volumes:
-      - ./data/synapse:/data
-    networks:
-      - matrix-network
-    ports:
-      - "8008:8008"  # HTTP port
-      - "8448:8448"  # HTTPS federation port
+    image: matrixdotorg/synapse:v1.113.0
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8008/_matrix/client/versions || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
-  # Synapse Admin interface
-  synapse-admin:
-    image: awesometechnologies/synapse-admin:latest
-    container_name: matrix-admin
-    depends_on:
-      - synapse
     environment:
-      - REACT_APP_SERVER=http://localhost:8008
+      SYNAPSE_SERVER_NAME: localhost
+      SYNAPSE_REPORT_STATS: "no"
+      SYNAPSE_ENABLE_REGISTRATION: "yes"
+      SYNAPSE_LOG_LEVEL: INFO
+    volumes:
+      - ./data:/data
+    ports:
+      - "8008:8008"
+    depends_on:
+      - postgres
+    networks:
+      - synapse_net
+
+  synapse-admin:
+    image: awesometechnologies/synapse-admin:0.10.3
+    restart: unless-stopped
     ports:
       - "8080:80"
+    environment:
+      - REACT_APP_SERVER=http://localhost:8008
     networks:
-      - matrix-network
-    restart: unless-stopped
+      - synapse_net
 
-  # Element Web client
   element:
-    image: vectorim/element-web:latest
-    container_name: matrix-element
-    volumes:
-      - ./docker/element/config.json:/app/config.json:ro
+    image: vectorim/element-web:v1.11.79
+    restart: unless-stopped
     ports:
       - "8081:80"
-    networks:
-      - matrix-network
-    restart: unless-stopped
-
-  # Mautrix Telegram Bridge with Puppeting Support
-  mautrix-telegram:
-    image: dock.mau.dev/mautrix/telegram:latest
-    container_name: mautrix-telegram
-    depends_on:
-      synapse:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    environment:
-      - UID=1000
-      - GID=1000
     volumes:
-      - ./data/mautrix-telegram:/data
-      - ./config/mautrix-telegram:/config:ro
+      - ./docker/element/config.json:/app/config.json:ro
     networks:
-      - matrix-network
+      - synapse_net
+
+  mautrix-telegram:
+    image: dock.mau.dev/mautrix/telegram:v0.15.1
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "python3 -c 'import requests; requests.get(\"http://localhost:8080/_matrix/mau/live\")' || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
+    volumes:
+      - ./mautrix-telegram:/data
+    depends_on:
+      - synapse
+      - postgres
+    networks:
+      - synapse_net
+
+networks:
+  synapse_net:
+    driver: bridge
 
 volumes:
   postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-  synapse_data:
-    driver: local
-  mautrix_telegram_data:
-    driver: local
-
-networks:
-  matrix-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
