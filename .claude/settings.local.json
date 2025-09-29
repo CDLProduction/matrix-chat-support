@@ -22,7 +22,12 @@
       "Bash(curl -H \"Authorization: Bearer syt_c3VwcG9ydA_WuQVgMMyWokphzuvinDp_3qbzPn\" \"http://localhost:8008/_matrix/client/v3/joined_rooms\")",
       "Bash(npm run serve:*)",
       "Bash(npm run:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(tree:*)",
+      "Bash(xargs ls:*)",
+      "Bash(for:*)",
+      "Bash(head:*)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

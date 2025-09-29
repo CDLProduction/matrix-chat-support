@@ -143,6 +143,13 @@ loadConfig()
 
 app.use(express.json())
 
+// Request logging middleware
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString()
+  console.log(`📥 ${timestamp} ${req.method} ${req.url} - ${req.ip || 'unknown'}`)
+  next()
+})
+
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, curl, etc.)
@@ -294,6 +301,8 @@ function buildDepartmentClientConfig() {
 }
 
 app.get('/api/config', (req, res) => {
+  console.log('🔧 [/api/config] Configuration requested by client')
+
   if (!validateConfig()) {
     return res.status(500).json({
       error: 'Server configuration is invalid. Check server logs for details.'
@@ -339,6 +348,8 @@ if (fs.existsSync(publicPath)) {
 }
 
 app.get('/embed.js', (req, res) => {
+  console.log('📄 [/embed.js] Widget embed script requested')
+
   const widgetPath = path.join(staticPath, 'matrix-chat-widget.iife.js')
   
   if (!fs.existsSync(widgetPath)) {
