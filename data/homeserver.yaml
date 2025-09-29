@@ -48,7 +48,7 @@ allow_guest_access: true
 
 # App service configuration for bridges
 app_service_config_files:
-  - /data/mautrix-telegram-registration.yaml
+  - /data/registration.yaml
 
 # Experimental features for spaces support
 experimental_features:

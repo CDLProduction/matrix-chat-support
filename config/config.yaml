@@ -9,8 +9,8 @@ departments:
     color: "#667eea"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_c3VwcG9ydA_TAhFIypfvsXmZlLYkoAs_3vBX8q"
-      admin_access_token: "syt_YWRtaW4_vKUNLipNBMtzPdrBVUJG_1KPmzR"
+      access_token: "syt_c3VwcG9ydA_WuQVgMMyWokphzuvinDp_3qbzPn"
+      admin_access_token: "syt_YWRtaW4_iYyCIvzvwNTqZPjjdVzq_1IUyy0"
       support_room_id: null  # Creates new rooms per conversation
       bot_user_id: "@support:localhost"
       spaceConfig:
@@ -28,8 +28,8 @@ departments:
     color: "#10b981"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_dGVjaF9zdXBwb3J0_ekBenGTpZMOlYqpVdIju_1ZK4f9"
-      admin_access_token: "syt_YWRtaW4_vKUNLipNBMtzPdrBVUJG_1KPmzR"
+      access_token: "syt_dGVjaF9zdXBwb3J0_oxoDhiLmLaVQbuQeSOzb_4FaQ5b"
+      admin_access_token: "syt_YWRtaW4_iYyCIvzvwNTqZPjjdVzq_1IUyy0"
       support_room_id: null
       bot_user_id: "@tech_support:localhost"
       spaceConfig:
@@ -47,8 +47,8 @@ departments:
     color: "#f59e0b"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_aWRlbnRpZmljYXRpb24_oVFFrMqvVuKIOfAtGAel_0rqrNv"
-      admin_access_token: "syt_YWRtaW4_vKUNLipNBMtzPdrBVUJG_1KPmzR"
+      access_token: "syt_aWRlbnRpZmljYXRpb24_eJHwCqgZbYIKjOEvVLQR_1z3PGG"
+      admin_access_token: "syt_YWRtaW4_iYyCIvzvwNTqZPjjdVzq_1IUyy0"
       support_room_id: null
       bot_user_id: "@identification:localhost"
       spaceConfig:
@@ -66,8 +66,8 @@ departments:
     color: "#8b5cf6"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_Y29tbWVyY2U_DtuyESgSaIqqxNpaMFGJ_2kNejP"
-      admin_access_token: "syt_YWRtaW4_vKUNLipNBMtzPdrBVUJG_1KPmzR"
+      access_token: "syt_Y29tbWVyY2U_EwSCqQwYadpeXlDCkXAn_4VqJa8"
+      admin_access_token: "syt_YWRtaW4_iYyCIvzvwNTqZPjjdVzq_1IUyy0"
       support_room_id: null
       bot_user_id: "@commerce:localhost"
       spaceConfig:
@@ -81,8 +81,8 @@ departments:
 # Legacy Matrix configuration (used as fallback for missing values)
 matrix:
   homeserver: "http://localhost:8008"
-  access_token: "syt_c3VwcG9ydA_TAhFIypfvsXmZlLYkoAs_3vBX8q"
-  admin_access_token: "syt_YWRtaW4_vKUNLipNBMtzPdrBVUJG_1KPmzR"
+  access_token: "syt_c3VwcG9ydA_WuQVgMMyWokphzuvinDp_3qbzPn"
+  admin_access_token: "syt_YWRtaW4_iYyCIvzvwNTqZPjjdVzq_1IUyy0"
   support_room_id: null
   bot_user_id: "@support:localhost"
 

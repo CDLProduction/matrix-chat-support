@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Start Telegram Department Bot
-cd /home/cdl/Projects/matrix-chat-support
+cd /Users/cdl/Projects/matrix-chat-support
 source telegram_env/bin/activate
 
 echo "Starting Telegram Department Bot..."

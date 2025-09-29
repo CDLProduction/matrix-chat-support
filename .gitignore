@@ -29,17 +29,19 @@ Thumbs.db
 *.p12
 *.pfx
 
-# Configuration files with secrets
-config.yaml
+# Configuration files with secrets (keep examples)
+# config.yaml # Keep this for working setup
 registration.yaml
-homeserver.yaml
+# homeserver.yaml # Keep this for Docker setup
 
 # =============================================================================
 # MATRIX & SYNAPSE DATA
 # =============================================================================
-# Synapse data directory (contains sensitive data)
+# Synapse data directory (contains sensitive data, but keep mappings)
 /data/
 !/data/.gitkeep
+# Keep chat room mappings for functionality
+!/data/chat-room-mappings.json
 
 # Matrix database files
 *.db
@@ -133,12 +135,19 @@ coverage.xml
 # =============================================================================
 # BUILD & DEPLOYMENT
 # =============================================================================
-# Build outputs
-/dist/
+# Build outputs (keep widget dist for production)
+# /dist/ # Keep dist for widget deployment
 /build/
 /public/build/
 *.tgz
 *.tar.gz
+
+# Keep essential built widget files for deployment
+!/dist/widget/
+# But exclude unnecessary test files from dist
+/dist/widget/*.html
+!/dist/widget/matrix-chat-widget.iife.js
+!/dist/widget/style.css
 
 # Docker
 docker-compose.override.yml
