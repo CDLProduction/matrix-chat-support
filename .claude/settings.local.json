@@ -27,7 +27,12 @@
       "Bash(xargs ls:*)",
       "Bash(for:*)",
       "Bash(head:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "mcp__context7__resolve-library-id",
+      "WebSearch",
+      "WebFetch(domain:mau.dev)",
+      "WebFetch(domain:developers.facebook.com)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

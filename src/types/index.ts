@@ -217,7 +217,7 @@ export interface ChatSession {
 }
 
 export interface SpaceSessionContext {
-  communicationChannelId: string    // 'web-chat', 'telegram', 'facebook'
+  communicationChannelId: string    // 'web-chat', 'telegram'
   channelSpaceId?: string          // Communication channel space ID
   departmentSpaceId?: string       // Department-specific space ID
   rootSpaceId?: string             // Root space ID
@@ -250,7 +250,7 @@ export interface ChatState {
 export interface SocialMediaChannel {
   id: string
   name: string
-  platform: 'telegram' | 'whatsapp' | 'facebook' | 'twitter' | 'instagram'
+  platform: 'telegram' | 'whatsapp' | 'twitter' | 'instagram'
   icon: string
   color: string
   enabled: boolean
@@ -261,6 +261,8 @@ export interface SocialMediaConfig {
   // Telegram specific
   botUsername?: string
   botToken?: string
+
+  // Department mappings
   departments?: SocialMediaDepartmentMapping[]
 
   // General config

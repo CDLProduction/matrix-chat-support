@@ -146,13 +146,24 @@ const SocialMediaIntegration: React.FC<SocialMediaIntegrationProps> = ({
             </h6>
             <ol className={styles.instructions}>
               <li>Click "Open {channel.name}" below to launch {channel.platform}</li>
-              <li>The bot will automatically detect your department ({department.name})</li>
-              <li>Start typing your message - our team will respond shortly</li>
-              <li>Continue the full conversation in {channel.platform}</li>
               {channel.platform === 'telegram' && (
-                <li className={styles.alternativeInstruction}>
-                  <strong>Alternative:</strong> Search for "@{channel.config.botUsername}" in Telegram and send: {getDepartmentCommand()}
-                </li>
+                <>
+                  <li>The bot will automatically detect your department ({department.name})</li>
+                  <li>Start typing your message - our team will respond shortly</li>
+                  <li>Continue the full conversation in Telegram</li>
+                  {channel.config.botUsername && (
+                    <li className={styles.alternativeInstruction}>
+                      <strong>Alternative:</strong> Search for "@{channel.config.botUsername}" in Telegram and send: {getDepartmentCommand()}
+                    </li>
+                  )}
+                </>
+              )}
+              {!['telegram'].includes(channel.platform) && (
+                <>
+                  <li>The bot will automatically detect your department ({department.name})</li>
+                  <li>Start typing your message - our team will respond shortly</li>
+                  <li>Continue the full conversation in {channel.platform}</li>
+                </>
               )}
             </ol>
           </div>
