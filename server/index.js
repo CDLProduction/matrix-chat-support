@@ -235,7 +235,8 @@ function buildDepartmentClientConfig() {
         accessToken: dept.matrix.access_token,
         adminAccessToken: dept.matrix.admin_access_token,
         supportRoomId: dept.matrix.support_room_id,
-        botUserId: dept.matrix.bot_user_id
+        botUserId: dept.matrix.bot_user_id,
+        departmentUsers: dept.matrix.department_users
       },
       widget: {
         greeting: dept.widget?.greeting,

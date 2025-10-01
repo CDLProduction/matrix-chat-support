@@ -101,16 +101,20 @@ export class MatrixChatClient {
         // Resolve appropriate space context for this room (defaults to web-chat channel)
         const spaceContext = await this.spaceManager.resolveSpaceForRoom(department, 'web-chat')
 
-      // Add room to the appropriate space based on department space configuration
-      const targetSpaceId = spaceContext.departmentSpaceId || spaceContext.channelSpaceId
+      // Add room ONLY to department space if it exists (not the channel space)
+      // This creates: "Web-Chat - General Support" → Room
+      // Instead of: "Web-Chat" → "Web-Chat - General Support" → Room
+      const targetSpaceId = spaceContext.departmentSpaceId
       if (targetSpaceId) {
         await this.spaceManager.addRoomToSpace(roomId, targetSpaceId)
-        console.log('[MatrixClient] Room successfully organized in space hierarchy', {
+        console.log('[MatrixClient] Room successfully organized in department space', {
           roomId,
           targetSpaceId,
           department: department.name,
-          spaceHierarchy: spaceContext.spaceHierarchy
+          departmentSpace: spaceContext.departmentSpaceId
         })
+      } else {
+        console.warn('[MatrixClient] No department space available, room not organized in spaces')
       }
 
       // Store space context in the session for future use
@@ -800,7 +804,26 @@ export class MatrixChatClient {
         await new Promise(resolve => setTimeout(resolve, 1000))
         
         // Invite configured support users/bots
-        if (this.config.botUserId && this.config.botUserId !== await this.getSupportBotUserId()) {
+        const supportBotUserId = await this.getSupportBotUserId()
+
+        // Invite all department users if configured
+        if (this.config.departmentUsers && Array.isArray(this.config.departmentUsers)) {
+          for (const userId of this.config.departmentUsers) {
+            // Skip inviting the support bot and current guest user
+            if (userId !== supportBotUserId && userId !== currentUserId) {
+              try {
+                await supportBotClient.invite(this.currentRoomId, userId)
+                console.log(`Invited department user: ${userId}`)
+              } catch (error) {
+                console.warn(`Failed to invite department user ${userId}:`, error)
+              }
+            }
+          }
+        }
+
+        // Fallback: Invite single bot user if no department users configured
+        if (this.config.botUserId && this.config.botUserId !== supportBotUserId &&
+            (!this.config.departmentUsers || this.config.departmentUsers.length === 0)) {
           try {
             await supportBotClient.invite(this.currentRoomId, this.config.botUserId)
           } catch (error) {

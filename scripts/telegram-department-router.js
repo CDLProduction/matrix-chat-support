@@ -72,33 +72,36 @@ function saveMappings() {
 // Load configuration
 const config = yaml.load(fs.readFileSync('../config/config.yaml', 'utf8'));
 
-// Telegram-specific department space mapping
-const TELEGRAM_DEPARTMENT_SPACES = {
-  'support': {
-    spaceId: null, // Will be created dynamically
-    name: 'Telegram - General Support',
-    matrixUser: '@support:localhost',
-    command: '/start_support'
-  },
-  'tech_support': {
-    spaceId: null, // Will be created dynamically
-    name: 'Telegram - Tech Support',
-    matrixUser: '@tech_support:localhost',
-    command: '/start_tech'
-  },
-  'identification': {
-    spaceId: null, // Will be created dynamically
-    name: 'Telegram - Account Verification',
-    matrixUser: '@identification:localhost',
-    command: '/start_id'
-  },
-  'commerce': {
-    spaceId: null, // Will be created dynamically
-    name: 'Telegram - Sales & Commerce',
-    matrixUser: '@commerce:localhost',
-    command: '/start_commerce'
-  }
-};
+// Build Telegram department spaces from config.yaml departments
+const TELEGRAM_DEPARTMENT_SPACES = {};
+
+if (config.departments && Array.isArray(config.departments)) {
+  config.departments.forEach(dept => {
+    // Find the Telegram command for this department from social_media config
+    let command = `/start_${dept.id}`;
+    if (config.social_media && Array.isArray(config.social_media)) {
+      const telegramConfig = config.social_media.find(sm => sm.platform === 'telegram');
+      if (telegramConfig && telegramConfig.config.departments) {
+        const deptConfig = telegramConfig.config.departments.find(d => d.department_id === dept.id);
+        if (deptConfig) {
+          command = deptConfig.command;
+        }
+      }
+    }
+
+    TELEGRAM_DEPARTMENT_SPACES[dept.id] = {
+      spaceId: null, // Will be created dynamically
+      name: `Telegram - ${dept.name}`,
+      matrixUser: dept.matrix.bot_user_id,
+      departmentUsers: dept.matrix.department_users || [],
+      command: command
+    };
+  });
+  console.log(`📋 Loaded ${Object.keys(TELEGRAM_DEPARTMENT_SPACES).length} departments from config`);
+} else {
+  console.error('❌ No departments found in config.yaml');
+  process.exit(1);
+}
 
 // Main Telegram space
 let MAIN_TELEGRAM_SPACE_ID = null;
@@ -231,46 +234,50 @@ async function ensureDepartmentUsersInSpaces() {
   console.log('🔧 Ensuring department users are invited to their spaces...');
 
   for (const [departmentId, department] of Object.entries(TELEGRAM_DEPARTMENT_SPACES)) {
-    try {
-      // First invite the user to the space
-      await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${department.spaceId}/invite`, {
-        user_id: department.matrixUser
-      }, {
-        headers: {
-          'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      console.log(`📧 Invited ${department.matrixUser} to space ${department.name}`);
+    // Find the department config to get access token
+    const deptConfig = config.departments.find(d => d.id === departmentId);
+    if (!deptConfig) {
+      console.log(`⚠️  Department ${departmentId} not found in config`);
+      continue;
+    }
 
-      // Then auto-join them to the space (this requires the user's own token)
-      const userTokenMap = {
-        '@support:localhost': 'syt_c3VwcG9ydA_WuQVgMMyWokphzuvinDp_3qbzPn',
-        '@tech_support:localhost': 'syt_dGVjaF9zdXBwb3J0_oxoDhiLmLaVQbuQeSOzb_4FaQ5b',
-        '@identification:localhost': 'syt_aWRlbnRpZmljYXRpb24_eJHwCqgZbYIKjOEvVLQR_1z3PGG',
-        '@commerce:localhost': 'syt_Y29tbWVyY2U_EwSCqQwYadpeXlDCkXAn_4VqJa8'
-      };
+    // Invite all department users to the space
+    const usersToInvite = department.departmentUsers || [];
+    if (usersToInvite.length === 0) {
+      console.log(`⚠️  No users configured for ${department.name}`);
+      continue;
+    }
 
-      const userToken = userTokenMap[department.matrixUser];
-      if (userToken) {
-        try {
-          await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${department.spaceId}/join`, {
-            server_name: 'localhost'
-          }, {
-            headers: {
-              'Authorization': `Bearer ${userToken}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          console.log(`✅ ${department.matrixUser} joined space ${department.name}`);
-        } catch (joinError) {
-          console.log(`ℹ️  ${department.matrixUser} join to ${department.name}: ${joinError.response?.data?.errcode || 'already joined'}`);
+    for (const userId of usersToInvite) {
+      try {
+        // Invite the user to the space using admin token
+        await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${department.spaceId}/invite`, {
+          user_id: userId
+        }, {
+          headers: {
+            'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log(`📧 Invited ${userId} to space ${department.name}`);
+
+        // Auto-join using the department's access token (first user's token)
+        if (userId === deptConfig.matrix.bot_user_id) {
+          try {
+            await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${department.spaceId}/join`, {}, {
+              headers: {
+                'Authorization': `Bearer ${deptConfig.matrix.access_token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            console.log(`✅ ${userId} joined space ${department.name}`);
+          } catch (joinError) {
+            console.log(`ℹ️  ${userId} join to ${department.name}: ${joinError.response?.data?.errcode || 'already joined'}`);
+          }
         }
+      } catch (error) {
+        console.log(`ℹ️  ${userId} invitation to ${department.name}: ${error.response?.data?.errcode || 'OK'}`);
       }
-
-    } catch (error) {
-      // User might already be in space or space might not exist, that's okay
-      console.log(`ℹ️  ${department.matrixUser} invitation to ${department.name}: ${error.response?.data?.errcode || 'OK'}`);
     }
   }
 }

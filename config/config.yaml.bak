@@ -9,8 +9,8 @@ departments:
     color: "#667eea"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_c3VwcG9ydF9hZ2VudDE_GOvIRBMUxypSdAwpcIKj_0uUQL9"
-      admin_access_token: "syt_YWRtaW4_VTRbtfkvKOWHKnZvNboG_4e5zAu"
+      access_token: "null"
+      admin_access_token: "null"
       support_room_id: null
       bot_user_id: "@support_agent1:localhost"
       department_users:
@@ -32,8 +32,8 @@ departments:
     color: "#10b981"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_Y29tbWVyY2VfYWdlbnQx_hlJesSVuBwCVDdUGZrNf_2tAq7c"
-      admin_access_token: "syt_YWRtaW4_VTRbtfkvKOWHKnZvNboG_4e5zAu"
+      access_token: "null"
+      admin_access_token: "null"
       support_room_id: null
       bot_user_id: "@commerce_agent1:localhost"
       department_users:
@@ -56,8 +56,8 @@ departments:
     color: "#f59e0b"
     matrix:
       homeserver: "http://localhost:8008"
-      access_token: "syt_aWRlbnRpZnlfYWdlbnQx_BKcJaMAeAkdtJRYqqifv_0UtYlY"
-      admin_access_token: "syt_YWRtaW4_VTRbtfkvKOWHKnZvNboG_4e5zAu"
+      access_token: "null"
+      admin_access_token: "null"
       support_room_id: null
       bot_user_id: "@identify_agent1:localhost"
       department_users:
@@ -74,8 +74,8 @@ departments:
 # Legacy Matrix configuration (fallback)
 matrix:
   homeserver: "http://localhost:8008"
-  access_token: "syt_YWRtaW4_VTRbtfkvKOWHKnZvNboG_4e5zAu"
-  admin_access_token: "syt_YWRtaW4_VTRbtfkvKOWHKnZvNboG_4e5zAu"
+  access_token: "null"
+  admin_access_token: "null"
   support_room_id: null
   bot_user_id: "@admin:localhost"
 

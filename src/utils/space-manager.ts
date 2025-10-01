@@ -181,11 +181,11 @@ export class SpaceManager {
 
     const departmentSpaceDescription = `${department.description || department.name} conversations from ${this.getChannelName(channelId)}`
 
-    // Check if already exists
+    // Check if already exists in cache
     const cacheKey = `dept-${channelId}-${departmentId}`
     const cachedSpaceId = this.spaceCache.get(cacheKey)
     if (cachedSpaceId && await this.validateSpaceExists(cachedSpaceId)) {
-      this.log('info', 'Department space already exists', {
+      this.log('info', 'Department space already exists (from cache)', {
         departmentId,
         channelId,
         spaceId: cachedSpaceId
@@ -194,10 +194,39 @@ export class SpaceManager {
     }
 
     try {
-      // Ensure communication channel space exists
-      const channelSpaceId = await this.ensureChannelSpaceExists(channelId)
+      // Search for existing space by name before creating a new one
+      this.log('debug', 'Searching for existing department space', { name: departmentSpaceName })
 
-      this.log('info', 'Creating department space', {
+      try {
+        const joinedRooms = await this.client.getJoinedRooms()
+
+        for (const roomId of joinedRooms.joined_rooms) {
+          try {
+            const roomName = await this.client.getStateEvent(roomId, 'm.room.name', '')
+            const createEvent = await this.client.getStateEvent(roomId, 'm.room.create', '')
+
+            if (roomName?.name === departmentSpaceName && createEvent?.type === 'm.space') {
+              this.log('info', 'Found existing department space', {
+                departmentId,
+                channelId,
+                spaceId: roomId,
+                name: departmentSpaceName
+              })
+              this.spaceCache.set(cacheKey, roomId)
+              return roomId
+            }
+          } catch (e) {
+            // Skip rooms we can't access
+            continue
+          }
+        }
+      } catch (searchError) {
+        this.log('warn', 'Failed to search for existing space, will create new one', {
+          error: searchError
+        })
+      }
+
+      this.log('info', 'Creating new department space', {
         departmentId,
         channelId,
         name: departmentSpaceName
@@ -218,11 +247,15 @@ export class SpaceManager {
       // Cache the department space ID
       this.spaceCache.set(cacheKey, room_id)
 
-      // Set parent relationship to channel space
-      await this.setSpaceParent(room_id, channelSpaceId)
-      await this.addChildToParentSpace(room_id, channelSpaceId)
+      // NOTE: Department spaces are created as standalone spaces, not as children of channel spaces
+      // This creates: "Web-Chat - General Support" → Room
+      // Instead of: "Web-Chat" → "Web-Chat - General Support" → Room
+      //
+      // Commented out to match previous implementation:
+      // await this.setSpaceParent(room_id, channelSpaceId)
+      // await this.addChildToParentSpace(room_id, channelSpaceId)
 
-      this.log('info', 'Department space created successfully', {
+      this.log('info', 'Department space created successfully (standalone)', {
         departmentId,
         channelId,
         spaceId: room_id
@@ -389,11 +422,8 @@ export class SpaceManager {
         channelId
       })
 
-      // Ensure base spaces exist
-      const rootSpaceId = await this.ensureRootSpaceExists()
-      const channelSpaceId = await this.ensureChannelSpaceExists(channelId)
-
-      // Resolve department space if configured
+      // SIMPLIFIED APPROACH: Only create standalone department space
+      // No root space, no channel space - just department space directly
       let departmentSpaceId: string | undefined
       const departmentConfig = this.config.departmentSpaces[channelId]
       if (departmentConfig?.autoCreateDepartmentSpaces) {
@@ -402,17 +432,13 @@ export class SpaceManager {
 
       const context: SpaceSessionContext = {
         communicationChannelId: channelId,
-        channelSpaceId,
+        channelSpaceId: undefined, // No channel space
         departmentSpaceId,
-        rootSpaceId,
-        spaceHierarchy: [rootSpaceId, channelSpaceId]
+        rootSpaceId: undefined, // No root space
+        spaceHierarchy: departmentSpaceId ? [departmentSpaceId] : []
       }
 
-      if (departmentSpaceId) {
-        context.spaceHierarchy?.push(departmentSpaceId)
-      }
-
-      this.log('info', 'Space context resolved for room', context)
+      this.log('info', 'Space context resolved for room (standalone department space)', context)
       return context
     } catch (error: any) {
       this.log('error', 'Failed to resolve space for room', {

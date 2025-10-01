@@ -4,6 +4,7 @@ export interface MatrixConfig {
   adminAccessToken?: string
   supportRoomId?: string
   botUserId?: string
+  departmentUsers?: string[]
   spaceConfig?: DepartmentSpaceConfig
 }
 

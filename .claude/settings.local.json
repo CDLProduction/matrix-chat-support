@@ -32,7 +32,10 @@
       "WebSearch",
       "WebFetch(domain:mau.dev)",
       "WebFetch(domain:developers.facebook.com)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(mkdir:*)",
+      "Bash(docker compose:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []
