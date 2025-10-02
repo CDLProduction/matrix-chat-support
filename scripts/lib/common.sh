@@ -266,6 +266,42 @@ check_command() {
   return 0
 }
 
+check_docker_permissions() {
+  print_info "Checking Docker permissions..."
+
+  # Test if we can actually run docker commands
+  if ! docker ps &> /dev/null; then
+    local error_output=$(docker ps 2>&1)
+
+    if echo "$error_output" | grep -q "permission denied"; then
+      print_error "Docker permission denied - user '$(whoami)' not in docker group"
+      echo ""
+      print_info "Current user groups: $(groups)"
+      echo ""
+      print_info "Fix Docker permissions (run as your regular user, not root):"
+      echo "  sudo usermod -aG docker $(whoami)"
+      echo "  newgrp docker"
+      echo ""
+      print_info "Then verify with: groups | grep docker"
+      echo ""
+      print_info "If still not working after logout/login, try:"
+      echo "  sudo chmod 666 /var/run/docker.sock"
+      echo "  (This is a temporary fix - reboot will reset it)"
+      return 1
+    else
+      print_error "Docker is not running or not accessible"
+      echo ""
+      print_info "Start Docker service:"
+      echo "  sudo systemctl start docker"
+      echo "  sudo systemctl enable docker"
+      return 1
+    fi
+  fi
+
+  print_success "Docker permissions OK"
+  return 0
+}
+
 check_docker_compose() {
   print_info "Checking Docker Compose..."
 
