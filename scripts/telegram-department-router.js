@@ -40,6 +40,23 @@ function loadMappings() {
         }
       }
 
+      // Restore Telegram space IDs
+      if (data.telegramSpaces) {
+        if (data.telegramSpaces.mainSpaceId) {
+          MAIN_TELEGRAM_SPACE_ID = data.telegramSpaces.mainSpaceId;
+          console.log(`📂 Restored main Telegram space: ${MAIN_TELEGRAM_SPACE_ID}`);
+        }
+
+        if (data.telegramSpaces.departmentSpaces) {
+          for (const [deptId, spaceId] of Object.entries(data.telegramSpaces.departmentSpaces)) {
+            if (TELEGRAM_DEPARTMENT_SPACES[deptId]) {
+              TELEGRAM_DEPARTMENT_SPACES[deptId].spaceId = spaceId;
+              console.log(`📂 Restored ${deptId} space: ${spaceId}`);
+            }
+          }
+        }
+      }
+
       console.log(`📂 Loaded ${chatRoomMapping.size} chat-room mappings from storage`);
     }
   } catch (error) {
@@ -50,9 +67,21 @@ function loadMappings() {
 // Save mappings to file
 function saveMappings() {
   try {
+    // Build department spaces object
+    const departmentSpaces = {};
+    for (const [deptId, department] of Object.entries(TELEGRAM_DEPARTMENT_SPACES)) {
+      if (department.spaceId) {
+        departmentSpaces[deptId] = department.spaceId;
+      }
+    }
+
     const data = {
       chatRoomMapping: Object.fromEntries(chatRoomMapping),
       roomChatMapping: Object.fromEntries(roomChatMapping),
+      telegramSpaces: {
+        mainSpaceId: MAIN_TELEGRAM_SPACE_ID,
+        departmentSpaces: departmentSpaces
+      },
       lastUpdated: new Date().toISOString()
     };
 
@@ -63,7 +92,7 @@ function saveMappings() {
     }
 
     fs.writeFileSync(MAPPINGS_FILE, JSON.stringify(data, null, 2));
-    console.log(`💾 Saved ${chatRoomMapping.size} chat-room mappings to storage`);
+    console.log(`💾 Saved ${chatRoomMapping.size} chat-room mappings and ${Object.keys(departmentSpaces).length} spaces to storage`);
   } catch (error) {
     console.error('❌ Failed to save mappings:', error.message);
   }
@@ -115,16 +144,14 @@ const telegramConfig = config.social_media.find(sm => sm.platform === 'telegram'
 const BOT_USERNAME = telegramConfig.config.bot_username;
 const bot = new TelegramBot(telegramConfig.config.bot_token, { polling: true });
 
-// Load existing mappings on startup
-loadMappings();
-
 // Create Telegram spaces if they don't exist
 async function createTelegramSpaces() {
   console.log('🔧 Creating/ensuring Telegram spaces exist...');
 
   try {
-    // Create main Telegram Support space
+    // Create main Telegram Support space (or use existing)
     if (!MAIN_TELEGRAM_SPACE_ID) {
+      console.log('📝 Creating new main Telegram Support space...');
       const mainSpaceResponse = await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/createRoom`, {
         name: 'Telegram Support',
         topic: 'Main space for all Telegram customer support conversations',
@@ -161,68 +188,74 @@ async function createTelegramSpaces() {
 
       MAIN_TELEGRAM_SPACE_ID = mainSpaceResponse.data.room_id;
       console.log(`✅ Created main Telegram Support space: ${MAIN_TELEGRAM_SPACE_ID}`);
+    } else {
+      console.log(`♻️  Reusing existing main Telegram Support space: ${MAIN_TELEGRAM_SPACE_ID}`);
     }
 
     // Create department subspaces within main Telegram space
     for (const [departmentId, department] of Object.entries(TELEGRAM_DEPARTMENT_SPACES)) {
       if (!department.spaceId) {
-        const subSpaceResponse = await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/createRoom`, {
-          name: department.name,
-          topic: `Telegram support space for ${department.name}`,
-          creation_content: { type: 'm.space' },
-          power_level_content_override: {
-            users: {
-              '@admin:localhost': 100,
-              [department.matrixUser]: 60
-            }
-          },
-          initial_state: [
-            {
-              type: 'm.room.history_visibility',
-              content: { history_visibility: 'shared' }
-            },
-            {
-              type: 'm.room.guest_access',
-              content: { guest_access: 'can_join' }
-            },
-            {
-              type: 'm.room.join_rules',
-              content: { join_rule: 'invite' }
-            }
-          ]
-        }, {
-          headers: {
-            'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        department.spaceId = subSpaceResponse.data.room_id;
-        console.log(`✅ Created department space: ${department.name} (${department.spaceId})`);
-
-        // Add department space as child of main Telegram space
-        await axios.put(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${MAIN_TELEGRAM_SPACE_ID}/state/m.space.child/${department.spaceId}`, {
-          via: ['localhost'],
-          suggested: true,
-          order: departmentId
-        }, {
-          headers: {
-            'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        // Set parent relationship
-        await axios.put(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${department.spaceId}/state/m.space.parent/${MAIN_TELEGRAM_SPACE_ID}`, {
-          via: ['localhost'],
-          canonical: true
-        }, {
-          headers: {
-            'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        console.log(`📝 Creating new department space: ${department.name}...`);
+      } else {
+        console.log(`♻️  Reusing existing department space: ${department.name} (${department.spaceId})`);
+        continue; // Skip creation if space already exists
       }
+      const subSpaceResponse = await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/createRoom`, {
+        name: department.name,
+        topic: `Telegram support space for ${department.name}`,
+        creation_content: { type: 'm.space' },
+        power_level_content_override: {
+          users: {
+            '@admin:localhost': 100,
+            [department.matrixUser]: 60
+          }
+        },
+        initial_state: [
+          {
+            type: 'm.room.history_visibility',
+            content: { history_visibility: 'shared' }
+          },
+          {
+            type: 'm.room.guest_access',
+            content: { guest_access: 'can_join' }
+          },
+          {
+            type: 'm.room.join_rules',
+            content: { join_rule: 'invite' }
+          }
+        ]
+      }, {
+        headers: {
+          'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      department.spaceId = subSpaceResponse.data.room_id;
+      console.log(`✅ Created department space: ${department.name} (${department.spaceId})`);
+
+      // Add department space as child of main Telegram space
+      await axios.put(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${MAIN_TELEGRAM_SPACE_ID}/state/m.space.child/${department.spaceId}`, {
+        via: ['localhost'],
+        suggested: true,
+        order: departmentId
+      }, {
+        headers: {
+          'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      // Set parent relationship
+      await axios.put(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${department.spaceId}/state/m.space.parent/${MAIN_TELEGRAM_SPACE_ID}`, {
+        via: ['localhost'],
+        canonical: true
+      }, {
+        headers: {
+          'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
     }
   } catch (error) {
     console.error('❌ Error creating Telegram spaces:', error.message);
@@ -284,8 +317,15 @@ async function ensureDepartmentUsersInSpaces() {
 
 // Create Telegram spaces and invite users
 async function initializeTelegramSpaces() {
+  // Load existing mappings and spaces first
+  loadMappings();
+
+  // Create or ensure spaces exist
   await createTelegramSpaces();
   await ensureDepartmentUsersInSpaces();
+
+  // Save updated spaces
+  saveMappings();
 }
 
 // Run space setup
@@ -432,13 +472,66 @@ async function sendWelcomeMessage(chatId) {
 }
 
 /**
+ * Verify room still exists and is accessible
+ */
+async function verifyRoomAccess(roomId) {
+  try {
+    // Simple check to verify room exists and is accessible
+    await axios.get(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${roomId}/state`, {
+      headers: {
+        'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`
+      }
+    });
+    return true;
+  } catch (error) {
+    console.error(`❌ Room ${roomId} is not accessible:`, error.response?.data || error.message);
+    return false;
+  }
+}
+
+/**
  * Handle department selection
  */
 async function handleDepartmentSelection(departmentId, telegramUser, chatId) {
   try {
     const department = TELEGRAM_DEPARTMENT_SPACES[departmentId];
 
-    // Send confirmation message
+    // Check if this user already has an existing room mapping
+    const existingMapping = chatRoomMapping.get(chatId);
+
+    if (existingMapping && existingMapping.roomId) {
+      // User is returning to an existing conversation
+      console.log(`🔄 User ${telegramUser.username || chatId} returning to existing room ${existingMapping.roomId}`);
+
+      // Verify room is still accessible
+      const roomAccessible = await verifyRoomAccess(existingMapping.roomId);
+
+      if (roomAccessible) {
+        // Simply reconnect without showing history (both sides already have it)
+        await bot.sendMessage(chatId, `
+✅ **Reconnected to ${department.name}**
+
+Your conversation has been restored. You can continue chatting with our support team.
+`, { parse_mode: 'Markdown' });
+
+        console.log(`✅ Reconnected user to existing room ${existingMapping.roomId}`);
+
+        return {
+          roomId: existingMapping.roomId,
+          departmentName: department.name,
+          spaceId: department.spaceId
+        };
+      } else {
+        // Room no longer accessible, clear mapping and create new room
+        console.log(`⚠️  Room ${existingMapping.roomId} no longer accessible, creating new room`);
+        chatRoomMapping.delete(chatId);
+        roomChatMapping.delete(existingMapping.roomId);
+        saveMappings();
+        // Fall through to create new room
+      }
+    }
+
+    // New conversation - create room
     await bot.sendMessage(chatId, `
 ✅ **Connected to ${department.name}**
 
