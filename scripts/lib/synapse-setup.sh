@@ -15,10 +15,18 @@ setup_synapse_docker() {
     error_exit "docker-compose.yml not found in current directory"
   fi
 
-  # Start Docker services
-  docker compose up -d postgres synapse synapse-admin element || {
-    error_exit "Failed to start Docker services"
-  }
+  # Start Docker services - try v2 first, fallback to v1
+  if command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1; then
+    docker compose up -d postgres synapse synapse-admin element || {
+      error_exit "Failed to start Docker services"
+    }
+  elif command -v docker-compose &> /dev/null; then
+    docker-compose up -d postgres synapse synapse-admin element || {
+      error_exit "Failed to start Docker services"
+    }
+  else
+    error_exit "Neither 'docker compose' nor 'docker-compose' is available"
+  fi
 
   print_success "Docker services started"
 }
@@ -30,7 +38,11 @@ wait_for_synapse() {
 
   wait_for_url "${homeserver_url}/health" 60 || {
     print_error "Synapse did not start properly"
-    print_info "Check logs with: docker compose logs synapse"
+    if docker compose version &> /dev/null 2>&1; then
+      print_info "Check logs with: docker compose logs synapse"
+    else
+      print_info "Check logs with: docker-compose logs synapse"
+    fi
     return 1
   }
 
@@ -326,9 +338,18 @@ create_root_space() {
 setup_postgres_docker() {
   print_step "Starting PostgreSQL with Docker..."
 
-  docker compose up -d postgres || {
-    error_exit "Failed to start PostgreSQL"
-  }
+  # Try docker compose (v2) first, fallback to docker-compose (v1)
+  if command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1; then
+    docker compose up -d postgres || {
+      error_exit "Failed to start PostgreSQL"
+    }
+  elif command -v docker-compose &> /dev/null; then
+    docker-compose up -d postgres || {
+      error_exit "Failed to start PostgreSQL"
+    }
+  else
+    error_exit "Neither 'docker compose' nor 'docker-compose' is available"
+  fi
 
   # Wait for PostgreSQL to be ready
   print_info "Waiting for PostgreSQL to be ready..."
