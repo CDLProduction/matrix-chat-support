@@ -36,8 +36,18 @@ check_prerequisites() {
   check_docker_compose || all_ok=false
   check_command "node" "Node.js" "18" || all_ok=false
   check_command "npm" "npm" || all_ok=false
+  check_command "python3" "Python 3" || all_ok=false
   check_command "curl" "curl" || all_ok=false
   check_command "jq" "jq" || all_ok=false
+
+  # Check for Python YAML library
+  if ! python3 -c "import yaml" 2>/dev/null; then
+    print_error "Python PyYAML library not installed"
+    print_info "Install with: sudo apt install python3-yaml"
+    all_ok=false
+  else
+    print_success "Python PyYAML found"
+  fi
 
   echo ""
   check_disk_space 5 || all_ok=false

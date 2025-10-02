@@ -12,86 +12,77 @@ generate_synapse_config() {
 
   print_step "Generating Synapse configuration..."
 
-  # Check if homeserver.yaml already exists
-  if [ -f "data/homeserver.yaml" ]; then
-    print_warning "Synapse configuration already exists, skipping generation"
+  # Check if homeserver.yaml already exists and is valid
+  if [ -f "data/homeserver.yaml" ] && grep -q "database:" data/homeserver.yaml 2>/dev/null; then
+    print_success "Synapse configuration already exists"
     return 0
   fi
 
-  # Generate default config using Synapse container
-  if command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1; then
-    docker compose run --rm synapse generate || {
-      error_exit "Failed to generate Synapse configuration"
-    }
-  elif command -v docker-compose &> /dev/null; then
-    docker-compose run --rm synapse generate || {
-      error_exit "Failed to generate Synapse configuration"
-    }
-  else
-    error_exit "Neither 'docker compose' nor 'docker-compose' is available"
-  fi
-
-  # Update database configuration
+  # Clean up any broken partial config
   if [ -f "data/homeserver.yaml" ]; then
-    print_info "Configuring PostgreSQL database..."
-
-    # Backup original
-    cp data/homeserver.yaml data/homeserver.yaml.bak
-
-    # Replace SQLite with PostgreSQL configuration
-    cat > data/homeserver.yaml.tmp << 'EOF'
-# Configuration file for Synapse.
-server_name: "localhost"
-pid_file: /data/homeserver.pid
-listeners:
-  - port: 8008
-    tls: false
-    type: http
-    x_forwarded: true
-    resources:
-      - names: [client, federation]
-        compress: false
-
-database:
-  name: psycopg2
-  args:
-    user: synapse_user
-    password: synapse_password
-    database: synapse
-    host: postgres
-    port: 5432
-    cp_min: 5
-    cp_max: 10
-
-log_config: "/data/localhost.log.config"
-media_store_path: /data/media_store
-registration_shared_secret: "REGISTRATION_SHARED_SECRET_PLACEHOLDER"
-report_stats: false
-macaroon_secret_key: "MACAROON_SECRET_KEY_PLACEHOLDER"
-form_secret: "FORM_SECRET_PLACEHOLDER"
-signing_key_path: "/data/localhost.signing.key"
-trusted_key_servers:
-  - server_name: "matrix.org"
-enable_registration: true
-enable_registration_without_verification: true
-EOF
-
-    # Generate secrets
-    local reg_secret=$(openssl rand -hex 32)
-    local macaroon_secret=$(openssl rand -hex 32)
-    local form_secret=$(openssl rand -hex 32)
-
-    sed -i.bak \
-      -e "s/REGISTRATION_SHARED_SECRET_PLACEHOLDER/$reg_secret/" \
-      -e "s/MACAROON_SECRET_KEY_PLACEHOLDER/$macaroon_secret/" \
-      -e "s/FORM_SECRET_PLACEHOLDER/$form_secret/" \
-      data/homeserver.yaml.tmp
-
-    mv data/homeserver.yaml.tmp data/homeserver.yaml
-    print_success "Synapse configuration generated"
-  else
-    error_exit "Failed to create homeserver.yaml"
+    print_warning "Removing incomplete Synapse configuration"
+    rm -f data/homeserver.yaml
   fi
+
+  # Generate config using Synapse Docker container
+  print_info "Running Synapse config generator..."
+
+  docker run --rm \
+    -v "$(pwd)/data:/data" \
+    -e SYNAPSE_SERVER_NAME="${server_name}" \
+    -e SYNAPSE_REPORT_STATS=no \
+    matrixdotorg/synapse:v1.113.0 generate || {
+      error_exit "Failed to generate Synapse configuration"
+    }
+
+  # Verify config was created
+  if [ ! -f "data/homeserver.yaml" ]; then
+    error_exit "Synapse configuration was not created"
+  fi
+
+  print_info "Configuring PostgreSQL database..."
+
+  # Backup original SQLite config
+  cp data/homeserver.yaml data/homeserver.yaml.sqlite.bak
+
+  # Replace SQLite database section with PostgreSQL
+  # Find the database section and replace it
+  python3 << 'PYTHON_SCRIPT' || {
+import yaml
+import sys
+
+# Read existing config
+with open('data/homeserver.yaml', 'r') as f:
+    config = yaml.safe_load(f)
+
+# Update database configuration
+config['database'] = {
+    'name': 'psycopg2',
+    'args': {
+        'user': 'synapse_user',
+        'password': 'synapse_password',
+        'database': 'synapse',
+        'host': 'postgres',
+        'port': 5432,
+        'cp_min': 5,
+        'cp_max': 10
+    }
+}
+
+# Enable registration
+config['enable_registration'] = True
+config['enable_registration_without_verification'] = True
+
+# Write updated config
+with open('data/homeserver.yaml', 'w') as f:
+    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+sys.exit(0)
+PYTHON_SCRIPT
+    error_exit "Failed to update Synapse configuration with PostgreSQL settings"
+  }
+
+  print_success "Synapse configuration generated and configured for PostgreSQL"
 }
 
 setup_synapse_docker() {
