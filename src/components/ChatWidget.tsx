@@ -102,13 +102,64 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
   }
 
   // Communication channel selection handler
-  const handleChannelSelect = (channel: any) => {
+  const handleChannelSelect = async (channel: any) => {
     setChatState(prev => ({
       ...prev,
       selectedChannel: channel,
-      currentStep: channel.type === 'social' ? 'social-media-setup' : 'user-form',
-      selectedSocialMedia: channel.socialMedia
+      selectedSocialMedia: channel.socialMedia,
+      error: undefined
     }))
+
+    // For web-chat channel with existing userDetails, attempt reconnection
+    if (channel.type === 'web' && chatState.userDetails && chatState.selectedDepartment) {
+      const departmentRoomId = getDepartmentRoomId(chatState.selectedDepartment.id)
+      const session = loadChatSession()
+
+      // Check if we have a room to reconnect to
+      if (departmentRoomId && session.roomId) {
+        console.log('[CHANNEL_SELECT] Existing user returning to department, attempting reconnection...')
+
+        // Show loading state
+        setChatState(prev => ({
+          ...prev,
+          currentStep: 'user-form',  // Temporary state while connecting
+          isLoading: true
+        }))
+
+        // Attempt reconnection
+        const success = await attemptReconnection(chatState.selectedDepartment, session)
+
+        if (!success) {
+          // Reconnection failed - show form to start fresh
+          setChatState(prev => ({
+            ...prev,
+            currentStep: 'user-form',
+            isLoading: false,
+            error: 'Could not restore your previous conversation. Starting a new chat.'
+          }))
+        }
+        // If success, attemptReconnection already set currentStep: 'chat'
+      } else {
+        // No existing room - go to form to create new chat
+        console.log('[CHANNEL_SELECT] No existing room found, showing form for new chat')
+        setChatState(prev => ({
+          ...prev,
+          currentStep: 'user-form'
+        }))
+      }
+    } else if (channel.type === 'social') {
+      // Social media channel
+      setChatState(prev => ({
+        ...prev,
+        currentStep: 'social-media-setup'
+      }))
+    } else {
+      // Web chat for new user or no existing room
+      setChatState(prev => ({
+        ...prev,
+        currentStep: 'user-form'
+      }))
+    }
   }
 
   // Social media selection handler
@@ -269,8 +320,53 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
         }))
       })
     }
-    
+
   }, [])
+
+  // Handle edge case: userDetails exist but no client when in user-form step
+  // This catches scenarios where reconnection didn't trigger properly
+  useEffect(() => {
+    // Only trigger if:
+    // 1. We're in user-form step
+    // 2. User details exist (returning user)
+    // 3. Selected department exists
+    // 4. No loading in progress
+    // 5. No Matrix client (disconnected state)
+    if (
+      chatState.currentStep === 'user-form' &&
+      chatState.userDetails &&
+      chatState.selectedDepartment &&
+      !chatState.isLoading &&
+      !chatState.matrixClient
+    ) {
+      console.log('[EDGE_CASE] Detected returning user without client, checking for reconnection...')
+
+      const departmentRoomId = getDepartmentRoomId(chatState.selectedDepartment.id)
+      const session = loadChatSession()
+
+      if (departmentRoomId && session.roomId) {
+        console.log('[EDGE_CASE] Triggering reconnection...')
+        setChatState(prev => ({ ...prev, isLoading: true }))
+
+        attemptReconnection(chatState.selectedDepartment, session).then((success) => {
+          if (!success) {
+            setChatState(prev => ({
+              ...prev,
+              isLoading: false,
+              error: 'Could not restore conversation. Please fill the form to start a new chat.'
+            }))
+          }
+        }).catch((error) => {
+          console.error('[EDGE_CASE] Reconnection error:', error)
+          setChatState(prev => ({
+            ...prev,
+            isLoading: false,
+            error: 'Failed to restore conversation. Please fill the form to start a new chat.'
+          }))
+        })
+      }
+    }
+  }, [chatState.currentStep, chatState.userDetails, chatState.selectedDepartment, chatState.matrixClient, chatState.isLoading])
 
   // Attempt to reconnect to existing chat session
   const attemptReconnection = async (department: any, session: any): Promise<boolean> => {
