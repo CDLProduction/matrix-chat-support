@@ -7,6 +7,93 @@
 # Synapse Server Setup
 # ============================================================================
 
+generate_synapse_config() {
+  local server_name="$1"
+
+  print_step "Generating Synapse configuration..."
+
+  # Check if homeserver.yaml already exists
+  if [ -f "data/homeserver.yaml" ]; then
+    print_warning "Synapse configuration already exists, skipping generation"
+    return 0
+  fi
+
+  # Generate default config using Synapse container
+  if command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1; then
+    docker compose run --rm synapse generate || {
+      error_exit "Failed to generate Synapse configuration"
+    }
+  elif command -v docker-compose &> /dev/null; then
+    docker-compose run --rm synapse generate || {
+      error_exit "Failed to generate Synapse configuration"
+    }
+  else
+    error_exit "Neither 'docker compose' nor 'docker-compose' is available"
+  fi
+
+  # Update database configuration
+  if [ -f "data/homeserver.yaml" ]; then
+    print_info "Configuring PostgreSQL database..."
+
+    # Backup original
+    cp data/homeserver.yaml data/homeserver.yaml.bak
+
+    # Replace SQLite with PostgreSQL configuration
+    cat > data/homeserver.yaml.tmp << 'EOF'
+# Configuration file for Synapse.
+server_name: "localhost"
+pid_file: /data/homeserver.pid
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: true
+    resources:
+      - names: [client, federation]
+        compress: false
+
+database:
+  name: psycopg2
+  args:
+    user: synapse_user
+    password: synapse_password
+    database: synapse
+    host: postgres
+    port: 5432
+    cp_min: 5
+    cp_max: 10
+
+log_config: "/data/localhost.log.config"
+media_store_path: /data/media_store
+registration_shared_secret: "REGISTRATION_SHARED_SECRET_PLACEHOLDER"
+report_stats: false
+macaroon_secret_key: "MACAROON_SECRET_KEY_PLACEHOLDER"
+form_secret: "FORM_SECRET_PLACEHOLDER"
+signing_key_path: "/data/localhost.signing.key"
+trusted_key_servers:
+  - server_name: "matrix.org"
+enable_registration: true
+enable_registration_without_verification: true
+EOF
+
+    # Generate secrets
+    local reg_secret=$(openssl rand -hex 32)
+    local macaroon_secret=$(openssl rand -hex 32)
+    local form_secret=$(openssl rand -hex 32)
+
+    sed -i.bak \
+      -e "s/REGISTRATION_SHARED_SECRET_PLACEHOLDER/$reg_secret/" \
+      -e "s/MACAROON_SECRET_KEY_PLACEHOLDER/$macaroon_secret/" \
+      -e "s/FORM_SECRET_PLACEHOLDER/$form_secret/" \
+      data/homeserver.yaml.tmp
+
+    mv data/homeserver.yaml.tmp data/homeserver.yaml
+    print_success "Synapse configuration generated"
+  else
+    error_exit "Failed to create homeserver.yaml"
+  fi
+}
+
 setup_synapse_docker() {
   print_step "Starting Synapse with Docker Compose..."
 

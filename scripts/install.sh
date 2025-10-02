@@ -347,6 +347,12 @@ execute_installation() {
 
   # Setup Synapse
   cd "$PROJECT_ROOT"
+
+  # Generate Synapse configuration before starting
+  local server_name=$(jq -r '.matrix.server_name' "$INSTALL_SESSION_FILE")
+  generate_synapse_config "$server_name"
+
+  # Now start Synapse with the configuration
   setup_synapse_docker
 
   local homeserver_url=$(jq -r '.matrix.homeserver_url' "$INSTALL_SESSION_FILE")
