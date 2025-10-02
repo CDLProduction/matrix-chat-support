@@ -645,6 +645,8 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       ...prev,
       currentStep: 'department-selection',
       selectedDepartment: undefined,
+      selectedChannel: undefined,        // CRITICAL: Clear channel selection
+      selectedSocialMedia: undefined,    // CRITICAL: Clear social media selection
       roomId: undefined,
       isConnected: false,
       matrixClient: undefined,
@@ -1139,24 +1141,8 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
                     <span className={styles.departmentName}>
                       {chatState.selectedDepartment.icon} {chatState.selectedDepartment.name}
                     </span>
-                    {/* Space context indicator */}
-                    {chatState.session?.spaceContext && config.widget.spaces?.showSpaceInHeader !== false && config.widget.spaces?.spaceIndicatorStyle !== 'hidden' && (
-                      <div className={styles.spaceIndicator} title="Matrix Space: Organized conversation">
-                        <svg className={styles.spaceIcon} width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M4 2H20C21.1 2 22 2.9 22 4V20C22 21.1 21.1 22 20 22H4C2.9 22 2 21.1 2 20V4C2.9 2 4 2.9 4 2ZM4 4V8H20V4H4ZM4 10V14H12V10H4ZM14 10V14H20V10H14ZM4 16V20H12V16H4ZM14 16V20H20V16H14Z"/>
-                        </svg>
-                        <span className={styles.spaceText}>
-                          {config.widget.spaces?.displayChannelOrigin !== false ? 'Web-Chat Space' : 'Space'}
-                          {config.widget.spaces?.spaceIndicatorStyle === 'detailed' && chatState.session?.spaceContext?.departmentSpaceId && (
-                            <span className={styles.spaceDetail}>
-                              → {chatState.selectedDepartment?.name}
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    )}
                     {config.departments && config.departments.length > 1 && (
-                      <button 
+                      <button
                         className={styles.switchDepartmentBtn}
                         onClick={handleSwitchDepartment}
                         aria-label="Switch department"
