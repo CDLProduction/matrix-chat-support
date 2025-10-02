@@ -1,0 +1,9 @@
+[Unit]
+Description=Matrix Chat Support Widget - Complete Stack
+Documentation=https://github.com/yourusername/matrix-chat-support
+After=network.target docker.service
+Requires=matrix-chat-docker.service matrix-chat-widget.service
+Wants=matrix-chat-telegram.service
+
+[Install]
+WantedBy=multi-user.target

@@ -569,7 +569,163 @@ main() {
   save_user_credentials
   display_summary
 
+  # Optional systemd installation
+  setup_systemd
+
   print_success "🎉 Installation complete!"
+  echo ""
+}
+
+# ============================================================================
+# Systemd Service Setup (Optional)
+# ============================================================================
+
+setup_systemd() {
+  print_section "STEP 8: Systemd Service Setup (Optional)"
+
+  # Check if systemd is available
+  if ! command -v systemctl &> /dev/null; then
+    print_info "Systemd not available on this system - skipping"
+    return 0
+  fi
+
+  # Check if running as root
+  if [ "$EUID" -ne 0 ]; then
+    print_warning "Systemd installation requires root privileges"
+    print_info "You can install systemd services later by running:"
+    print_info "  sudo $PROJECT_ROOT/config/systemd/install-systemd.sh"
+    echo ""
+    return 0
+  fi
+
+  echo ""
+  print_info "Systemd services allow you to manage the application with:"
+  echo ""
+  echo "  sudo systemctl start matrix-chat-widget"
+  echo "  sudo systemctl status matrix-chat-*"
+  echo "  sudo journalctl -u matrix-chat-widget -f"
+  echo ""
+  print_info "Services will auto-start on system boot and auto-restart on failure"
+  echo ""
+
+  if ! ask_yes_no "Install systemd services now?" "y"; then
+    print_info "Skipping systemd installation"
+    print_info "To install later, run: sudo $PROJECT_ROOT/config/systemd/install-systemd.sh"
+    echo ""
+    return 0
+  fi
+
+  print_subsection "Installing Systemd Services"
+
+  # Create system user if doesn't exist
+  if ! id "matrix-chat" &>/dev/null; then
+    print_step "Creating system user 'matrix-chat'..."
+    useradd -r -s /bin/false -d "$PROJECT_ROOT" -c "Matrix Chat Support Widget" matrix-chat
+    print_success "Created user: matrix-chat"
+  else
+    print_info "User 'matrix-chat' already exists"
+  fi
+
+  # Set ownership
+  print_step "Setting file ownership..."
+  chown -R matrix-chat:matrix-chat "$PROJECT_ROOT"
+  chmod 755 "$PROJECT_ROOT/data"
+  chmod 755 "$PROJECT_ROOT/logs"
+
+  # Protect sensitive files
+  if [ -f "$PROJECT_ROOT/config/config.yaml" ]; then
+    chmod 600 "$PROJECT_ROOT/config/config.yaml"
+  fi
+  if [ -f "$PROJECT_ROOT/data/chat-room-mappings.json" ]; then
+    chmod 600 "$PROJECT_ROOT/data/chat-room-mappings.json"
+  fi
+  print_success "Ownership and permissions configured"
+
+  # Process and install service files
+  print_step "Installing service files..."
+
+  local tmp_dir=$(mktemp -d)
+
+  # Update service files with actual project path
+  for service_file in "$PROJECT_ROOT/config/systemd"/*.service; do
+    if [ -f "$service_file" ]; then
+      local service_name=$(basename "$service_file")
+      sed "s|/opt/matrix-chat-support|$PROJECT_ROOT|g" "$service_file" > "$tmp_dir/$service_name"
+    fi
+  done
+
+  # Copy to systemd directory
+  cp "$tmp_dir"/*.service /etc/systemd/system/
+  rm -rf "$tmp_dir"
+  print_success "Service files installed"
+
+  # Reload systemd
+  print_step "Reloading systemd daemon..."
+  systemctl daemon-reload
+  print_success "Systemd reloaded"
+
+  # Enable services
+  print_step "Enabling services..."
+
+  # Enable individual services
+  systemctl enable matrix-chat-docker.service
+  systemctl enable matrix-chat-widget.service
+
+  local telegram_enabled=$(jq -r '.telegram.enabled' "$INSTALL_SESSION_FILE")
+  if [ "$telegram_enabled" = "true" ]; then
+    systemctl enable matrix-chat-telegram.service
+  fi
+
+  # Enable master target
+  systemctl enable matrix-chat.target
+
+  print_success "Services enabled for auto-start on boot"
+  print_info "Master service 'matrix-chat.target' enabled - manage all services with one command"
+
+  # Start services
+  echo ""
+  if ask_yes_no "Start services now?" "y"; then
+    print_step "Starting all services via master target..."
+
+    # Start master target (starts all dependencies automatically)
+    systemctl start matrix-chat.target
+
+    print_info "Waiting for all services to start..."
+    sleep 15
+
+    # Check status of all services
+    if systemctl is-active --quiet matrix-chat-widget.service; then
+      print_success "Widget server started"
+    fi
+
+    if systemctl is-active --quiet matrix-chat-docker.service; then
+      print_success "Docker services started"
+    fi
+
+    if [ "$telegram_enabled" = "true" ]; then
+      if systemctl is-active --quiet matrix-chat-telegram.service; then
+        print_success "Telegram router started"
+      fi
+    fi
+
+    echo ""
+    print_success "All services started successfully!"
+    echo ""
+    print_info "Manage all services with: sudo systemctl {start|stop|restart|status} matrix-chat.target"
+    print_info "Check individual status: sudo systemctl status matrix-chat-*"
+    print_info "View logs: sudo journalctl -u matrix-chat-widget -f"
+  else
+    print_info "Services installed but not started"
+    echo ""
+    print_info "Start all services with: sudo systemctl start matrix-chat.target"
+    print_info "Or start individually:"
+    print_info "  sudo systemctl start matrix-chat-docker"
+    print_info "  sudo systemctl start matrix-chat-widget"
+    if [ "$telegram_enabled" = "true" ]; then
+      print_info "  sudo systemctl start matrix-chat-telegram"
+    fi
+  fi
+
   echo ""
 }
 

@@ -1,0 +1,29 @@
+[Unit]
+Description=Matrix Chat Support Docker Services
+Documentation=https://github.com/yourusername/matrix-chat-support
+After=docker.service
+Requires=docker.service
+Before=matrix-chat-widget.service matrix-chat-telegram.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+Group=root
+WorkingDirectory=/opt/matrix-chat-support
+
+# Start Docker Compose services
+ExecStart=/usr/bin/docker compose up -d postgres synapse synapse-admin element
+
+# Stop Docker Compose services
+ExecStop=/usr/bin/docker compose down
+
+# Reload Docker Compose services
+ExecReload=/usr/bin/docker compose restart
+
+# Resource limits
+TimeoutStartSec=300
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target matrix-chat.target
