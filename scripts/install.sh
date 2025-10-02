@@ -359,7 +359,7 @@ execute_installation() {
   cd "$PROJECT_ROOT"
 
   # Generate Synapse configuration before starting
-  local server_name=$(jq -r '.matrix.server_name' "$INSTALL_SESSION_FILE")
+  local server_name=$(jq -r '.matrix.domain' "$INSTALL_SESSION_FILE")
   generate_synapse_config "$server_name"
 
   # Now start Synapse with the configuration

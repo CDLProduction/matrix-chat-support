@@ -27,9 +27,17 @@ generate_synapse_config() {
   # Generate config using Synapse Docker container
   print_info "Running Synapse config generator..."
 
+  # Use localhost as default if server_name is empty or "null"
+  local final_server_name="${server_name:-localhost}"
+  if [ "$final_server_name" = "null" ] || [ -z "$final_server_name" ]; then
+    final_server_name="localhost"
+  fi
+
+  print_info "Generating config for server: $final_server_name"
+
   docker run --rm \
     -v "$(pwd)/data:/data" \
-    -e SYNAPSE_SERVER_NAME="${server_name}" \
+    -e SYNAPSE_SERVER_NAME="$final_server_name" \
     -e SYNAPSE_REPORT_STATS=no \
     matrixdotorg/synapse:v1.113.0 generate || {
       error_exit "Failed to generate Synapse configuration"
