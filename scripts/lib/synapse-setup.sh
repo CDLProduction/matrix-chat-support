@@ -42,8 +42,11 @@ generate_synapse_config() {
 
   print_info "Configuring PostgreSQL database..."
 
+  # Fix ownership so we can edit the file
+  sudo chown -R $(whoami):$(whoami) data/ 2>/dev/null || true
+
   # Backup original SQLite config
-  cp data/homeserver.yaml data/homeserver.yaml.sqlite.bak
+  cp data/homeserver.yaml data/homeserver.yaml.sqlite.bak 2>/dev/null || true
 
   # Replace SQLite database section with PostgreSQL
   # Find the database section and replace it
@@ -51,33 +54,37 @@ generate_synapse_config() {
 import yaml
 import sys
 
-# Read existing config
-with open('data/homeserver.yaml', 'r') as f:
-    config = yaml.safe_load(f)
+try:
+    # Read existing config
+    with open('data/homeserver.yaml', 'r') as f:
+        config = yaml.safe_load(f)
 
-# Update database configuration
-config['database'] = {
-    'name': 'psycopg2',
-    'args': {
-        'user': 'synapse_user',
-        'password': 'synapse_password',
-        'database': 'synapse',
-        'host': 'postgres',
-        'port': 5432,
-        'cp_min': 5,
-        'cp_max': 10
+    # Update database configuration
+    config['database'] = {
+        'name': 'psycopg2',
+        'args': {
+            'user': 'synapse_user',
+            'password': 'synapse_password',
+            'database': 'synapse',
+            'host': 'postgres',
+            'port': 5432,
+            'cp_min': 5,
+            'cp_max': 10
+        }
     }
-}
 
-# Enable registration
-config['enable_registration'] = True
-config['enable_registration_without_verification'] = True
+    # Enable registration
+    config['enable_registration'] = True
+    config['enable_registration_without_verification'] = True
 
-# Write updated config
-with open('data/homeserver.yaml', 'w') as f:
-    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    # Write updated config
+    with open('data/homeserver.yaml', 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
-sys.exit(0)
+    sys.exit(0)
+except Exception as e:
+    print(f"Error: {e}", file=sys.stderr)
+    sys.exit(1)
 PYTHON_SCRIPT
     error_exit "Failed to update Synapse configuration with PostgreSQL settings"
   }
