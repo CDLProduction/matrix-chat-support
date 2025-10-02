@@ -333,7 +333,7 @@ EOF
 validate_telegram_token() {
   local token="$1"
 
-  print_info "Validating Telegram bot token..."
+  print_info "Validating Telegram bot token..." >&2
 
   local response=$(curl -s "https://api.telegram.org/bot${token}/getMe")
   local is_bot=$(echo "$response" | jq -r '.result.is_bot // false')
@@ -341,11 +341,11 @@ validate_telegram_token() {
   if [ "$is_bot" = "true" ]; then
     local username=$(echo "$response" | jq -r '.result.username')
     local bot_name=$(echo "$response" | jq -r '.result.first_name')
-    print_success "Bot verified: @$username ($bot_name)"
+    print_success "Bot verified: @$username ($bot_name)" >&2
     echo "$username"
     return 0
   else
-    print_error "Invalid Telegram bot token"
+    print_error "Invalid Telegram bot token" >&2
     return 1
   fi
 }

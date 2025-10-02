@@ -125,7 +125,7 @@ ask_password() {
 
   while true; do
     read -s -p "$(echo -e "${CYAN}$prompt:${NC} ")" password
-    echo ""
+    echo "" >&2
 
     if [ -z "$password" ]; then
       print_error "Password cannot be empty"
@@ -138,7 +138,7 @@ ask_password() {
     fi
 
     read -s -p "$(echo -e "${CYAN}Confirm password:${NC} ")" password_confirm
-    echo ""
+    echo "" >&2
 
     if [ "$password" = "$password_confirm" ]; then
       echo "$password"

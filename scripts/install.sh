@@ -389,6 +389,36 @@ execute_installation() {
     generate_mautrix_telegram_config "$INSTALL_SESSION_FILE" "$PROJECT_ROOT/mautrix-telegram/config.yaml" "$PROJECT_ROOT/mautrix-telegram/config.yaml"
     generate_bridge_registration "$PROJECT_ROOT/mautrix-telegram/registration.yaml"
 
+    # Add registration file to Synapse config
+    print_step "Updating Synapse configuration for bridge..."
+    python3 << 'PYTHON_SCRIPT' || print_warning "Failed to update Synapse config with registration file"
+import yaml
+import sys
+
+try:
+    with open('data/homeserver.yaml', 'r') as f:
+        config = yaml.safe_load(f)
+
+    config['app_service_config_files'] = ['/data/mautrix-telegram-registration.yaml']
+
+    with open('data/homeserver.yaml', 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+    sys.exit(0)
+except Exception as e:
+    print(f"Error: {e}", file=sys.stderr)
+    sys.exit(1)
+PYTHON_SCRIPT
+
+    # Restart Synapse to load bridge registration
+    print_step "Restarting Synapse to load bridge..."
+    if docker compose version &> /dev/null 2>&1; then
+      docker compose restart synapse
+    else
+      docker-compose restart synapse
+    fi
+    sleep 10
+
     # Start Telegram bridge
     start_mautrix_telegram
     sleep 5

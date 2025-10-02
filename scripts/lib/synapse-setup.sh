@@ -85,6 +85,10 @@ try:
     config['enable_registration'] = True
     config['enable_registration_without_verification'] = True
 
+    # Remove app_service_config_files if present (will be added later if Telegram enabled)
+    if 'app_service_config_files' in config:
+        del config['app_service_config_files']
+
     # Write updated config
     with open('data/homeserver.yaml', 'w') as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
