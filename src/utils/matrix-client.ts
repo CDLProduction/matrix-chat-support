@@ -310,16 +310,61 @@ export class MatrixChatClient {
   }
 
   /**
+   * Validates if a guest token is still valid
+   * Returns true if token is valid, false if expired/invalid
+   */
+  private async validateGuestToken(userId: string, accessToken: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.config.homeserver}/_matrix/client/r0/account/whoami`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const isValid = data.user_id === userId
+        console.log(`[GUEST] Token validation: ${isValid ? 'VALID' : 'USER_MISMATCH'}`)
+        return isValid
+      } else {
+        console.warn(`[GUEST] Token validation failed: ${response.status}`)
+        return false
+      }
+    } catch (error) {
+      console.warn('[GUEST] Token validation error:', error)
+      return false
+    }
+  }
+
+  /**
    * Creates or retrieves a guest user for the customer chat session
    */
   private async getOrCreateGuestUser(userDetails: UserDetails): Promise<{userId: string, accessToken: string}> {
     const session = loadChatSession()
-    
+
     // Check if we already have guest credentials stored
     if (session.guestUserId && session.guestAccessToken) {
-      return {
-        userId: session.guestUserId,
-        accessToken: session.guestAccessToken
+      console.log('[GUEST] Found stored credentials, validating...')
+
+      // Validate token before reusing
+      const isValid = await this.validateGuestToken(
+        session.guestUserId,
+        session.guestAccessToken
+      )
+
+      if (isValid) {
+        console.log('[GUEST] Reusing valid guest credentials:', session.guestUserId)
+        return {
+          userId: session.guestUserId,
+          accessToken: session.guestAccessToken
+        }
+      } else {
+        console.warn('[GUEST] Stored token invalid, creating new guest user')
+        // Clear invalid credentials from session
+        updateChatSession({
+          guestUserId: undefined,
+          guestAccessToken: undefined
+        })
       }
     }
     
