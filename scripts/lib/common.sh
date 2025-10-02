@@ -155,9 +155,9 @@ ask_choice() {
   local options=("$@")
   local choice
 
-  echo -e "${CYAN}$prompt${NC}"
+  echo -e "${CYAN}$prompt${NC}" >&2
   for i in "${!options[@]}"; do
-    echo "  $((i+1))) ${options[$i]}"
+    echo "  $((i+1))) ${options[$i]}" >&2
   done
 
   while true; do
