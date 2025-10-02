@@ -1,10 +1,7 @@
 #!/bin/bash
 # Configuration file generation from installation session data
 # Generates all configuration files needed for the system
-
-# Source common functions
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh"
+# Note: Requires common.sh to be sourced by parent script
 
 # ============================================================================
 # Main config.yaml Generation

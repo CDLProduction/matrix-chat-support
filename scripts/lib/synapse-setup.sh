@@ -1,10 +1,7 @@
 #!/bin/bash
 # Synapse setup and user management functions
 # Handles Matrix/Synapse server setup and user creation
-
-# Source common functions
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh"
+# Note: Requires common.sh to be sourced by parent script
 
 # ============================================================================
 # Synapse Server Setup

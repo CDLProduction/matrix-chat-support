@@ -1,10 +1,7 @@
 #!/bin/bash
 # Telegram bridge setup and configuration
 # Handles mautrix-telegram bridge configuration and startup
-
-# Source common functions
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh"
+# Note: Requires common.sh to be sourced by parent script
 
 # ============================================================================
 # mautrix-telegram Configuration Generation
