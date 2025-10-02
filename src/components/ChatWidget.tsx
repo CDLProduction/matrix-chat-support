@@ -102,13 +102,64 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
   }
 
   // Communication channel selection handler
-  const handleChannelSelect = (channel: any) => {
+  const handleChannelSelect = async (channel: any) => {
     setChatState(prev => ({
       ...prev,
       selectedChannel: channel,
-      currentStep: channel.type === 'social' ? 'social-media-setup' : 'user-form',
-      selectedSocialMedia: channel.socialMedia
+      selectedSocialMedia: channel.socialMedia,
+      error: undefined
     }))
+
+    // For web-chat channel with existing userDetails, attempt reconnection
+    if (channel.type === 'web' && chatState.userDetails && chatState.selectedDepartment) {
+      const departmentRoomId = getDepartmentRoomId(chatState.selectedDepartment.id)
+      const session = loadChatSession()
+
+      // Check if we have a room to reconnect to
+      if (departmentRoomId && session.roomId) {
+        console.log('[CHANNEL_SELECT] Existing user returning to department, attempting reconnection...')
+
+        // Show loading state
+        setChatState(prev => ({
+          ...prev,
+          currentStep: 'user-form',  // Temporary state while connecting
+          isLoading: true
+        }))
+
+        // Attempt reconnection
+        const success = await attemptReconnection(chatState.selectedDepartment, session)
+
+        if (!success) {
+          // Reconnection failed - show form to start fresh
+          setChatState(prev => ({
+            ...prev,
+            currentStep: 'user-form',
+            isLoading: false,
+            error: 'Could not restore your previous conversation. Starting a new chat.'
+          }))
+        }
+        // If success, attemptReconnection already set currentStep: 'chat'
+      } else {
+        // No existing room - go to form to create new chat
+        console.log('[CHANNEL_SELECT] No existing room found, showing form for new chat')
+        setChatState(prev => ({
+          ...prev,
+          currentStep: 'user-form'
+        }))
+      }
+    } else if (channel.type === 'social') {
+      // Social media channel
+      setChatState(prev => ({
+        ...prev,
+        currentStep: 'social-media-setup'
+      }))
+    } else {
+      // Web chat for new user or no existing room
+      setChatState(prev => ({
+        ...prev,
+        currentStep: 'user-form'
+      }))
+    }
   }
 
   // Social media selection handler
@@ -203,15 +254,37 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       // Find the department in current config to make sure it still exists
       const validDepartment = config.departments.find(d => d.id === storedDepartment.id)
       if (validDepartment) {
+        // Don't show chat UI yet - keep in loading state during reconnection
         setChatState(prev => ({
           ...prev,
           selectedDepartment: validDepartment,
-          currentStep: session.userDetails ? 'chat' : 'user-form'
+          currentStep: 'user-form',  // Stay in form state while reconnecting
+          isLoading: session.userDetails ? true : false,  // Show loading if reconnecting
+          error: undefined
         }))
-        
+
         // Attempt to reconnect if user has existing session with room
         if (session.userDetails && session.roomId) {
-          setTimeout(() => attemptReconnection(validDepartment, session), 1000)
+          attemptReconnection(validDepartment, session).then((success) => {
+            if (!success) {
+              // Reconnection failed - show error and allow fresh start
+              setChatState(prev => ({
+                ...prev,
+                isLoading: false,
+                currentStep: 'user-form',
+                error: 'Could not restore your previous conversation. Please start a new chat.'
+              }))
+            }
+            // If success, attemptReconnection already updated the state
+          }).catch((error) => {
+            console.error('[WIDGET] Reconnection error:', error)
+            setChatState(prev => ({
+              ...prev,
+              isLoading: false,
+              currentStep: 'user-form',
+              error: 'Failed to restore conversation. Please start a new chat.'
+            }))
+          })
         }
       } else {
         console.warn('⚠️ Stored department no longer exists in config:', storedDepartment.id)
@@ -224,24 +297,96 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       }
     } else if (session.userDetails && session.roomId && !config.departments) {
       // Legacy mode reconnection - no departments
-      setTimeout(() => attemptLegacyReconnection(session), 1000)
+      setChatState(prev => ({
+        ...prev,
+        isLoading: true,
+        error: undefined
+      }))
+
+      attemptLegacyReconnection(session).then((success) => {
+        if (!success) {
+          setChatState(prev => ({
+            ...prev,
+            isLoading: false,
+            error: 'Could not restore your previous conversation. Please start a new chat.'
+          }))
+        }
+      }).catch((error) => {
+        console.error('[WIDGET] Legacy reconnection error:', error)
+        setChatState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: 'Failed to restore conversation. Please start a new chat.'
+        }))
+      })
     }
-    
+
   }, [])
 
+  // Handle edge case: userDetails exist but no client when in user-form step
+  // This catches scenarios where reconnection didn't trigger properly
+  useEffect(() => {
+    // Only trigger if:
+    // 1. We're in user-form step
+    // 2. User details exist (returning user)
+    // 3. Selected department exists
+    // 4. No loading in progress
+    // 5. No Matrix client (disconnected state)
+    if (
+      chatState.currentStep === 'user-form' &&
+      chatState.userDetails &&
+      chatState.selectedDepartment &&
+      !chatState.isLoading &&
+      !chatState.matrixClient
+    ) {
+      console.log('[EDGE_CASE] Detected returning user without client, checking for reconnection...')
+
+      const departmentRoomId = getDepartmentRoomId(chatState.selectedDepartment.id)
+      const session = loadChatSession()
+
+      if (departmentRoomId && session.roomId) {
+        console.log('[EDGE_CASE] Triggering reconnection...')
+        setChatState(prev => ({ ...prev, isLoading: true }))
+
+        attemptReconnection(chatState.selectedDepartment, session).then((success) => {
+          if (!success) {
+            setChatState(prev => ({
+              ...prev,
+              isLoading: false,
+              error: 'Could not restore conversation. Please fill the form to start a new chat.'
+            }))
+          }
+        }).catch((error) => {
+          console.error('[EDGE_CASE] Reconnection error:', error)
+          setChatState(prev => ({
+            ...prev,
+            isLoading: false,
+            error: 'Failed to restore conversation. Please fill the form to start a new chat.'
+          }))
+        })
+      }
+    }
+  }, [chatState.currentStep, chatState.userDetails, chatState.selectedDepartment, chatState.matrixClient, chatState.isLoading])
+
   // Attempt to reconnect to existing chat session
-  const attemptReconnection = async (department: any, session: any) => {
+  const attemptReconnection = async (department: any, session: any): Promise<boolean> => {
     try {
-      setChatState(prev => ({ 
-        ...prev, 
-        isLoading: true, 
-        error: undefined 
+      setChatState(prev => ({
+        ...prev,
+        isLoading: true,
+        currentStep: 'user-form',  // Keep in form state during reconnection
+        error: undefined
       }))
-      
+
       // Get the department-specific room ID
       const departmentRoomId = getDepartmentRoomId(department.id)
-      
-      
+
+      // Validate we have required data
+      if (!departmentRoomId || !session.userDetails) {
+        console.warn('[RECONNECT] Missing required data for reconnection')
+        return false
+      }
+
       // For reconnection, use the guest credentials stored in session
       // This ensures we see the full conversation from the customer's perspective
       let matrixConfig: any
@@ -252,15 +397,16 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
           user_id: session.guestUserId
         }
       } else {
-        // Fallback to bot credentials if no guest credentials available
-        matrixConfig = department.matrix
+        console.warn('[RECONNECT] No guest credentials available')
+        return false
       }
-      
+
       const client = new MatrixChatClient(matrixConfig)
+
       // Pass department ID to connect for proper room restoration
       await client.connect(session.userDetails, department.id)
       clientRef.current = client
-      
+
       // Set up message handlers for this department's client
       client.onMessage((message) => {
         setChatState(prev => ({
@@ -269,100 +415,111 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
         }))
         onMessage?.(message)
       })
-      
+
       client.onConnection((connected) => {
         setChatState(prev => ({ ...prev, isConnected: connected }))
       })
-      
-      // Try to rejoin the department-specific room
-      if (departmentRoomId) {
-        console.log('🗳 [RECONNECT] Rejoining room:', {
-          department_id: department.id,
-          room_id: departmentRoomId
-        })
-        try {
-          await client.joinRoom(departmentRoomId, department.id)
-          
-          // Load message history
-          setChatState(prev => ({ 
-            ...prev, 
-            isLoadingHistory: true 
-          }))
-          
-          const messages = await client.loadMessageHistory(departmentRoomId)
-          
-          setChatState(prev => ({
-            ...prev,
-            isConnected: true,
-            isLoading: false,
-            isLoadingHistory: false,
-            matrixClient: client,
-            messages: messages || [],
-            roomId: departmentRoomId
-          }))
-          
-          // Ensure department room ID is stored
-          setDepartmentRoomId(department.id, departmentRoomId)
-          
-          onConnect?.({ 
-            roomId: departmentRoomId, 
-            isReconnection: true,
-            department: department.name 
-          })
-          
-        } catch (roomError: any) {
-          console.warn('⚠️ Could not rejoin existing room, will need to create new one:', roomError.message)
-          // Don't set error here - just clear the room info so user can start fresh
-          setChatState(prev => ({
-            ...prev,
-            isConnected: true,
-            isLoading: false,
-            matrixClient: client,
-            roomId: undefined // Clear invalid room
-          }))
-        }
-      } else {
-        // No room to rejoin, but client is connected
-        setChatState(prev => ({
-          ...prev,
-          isConnected: true,
-          isLoading: false,
-          matrixClient: client
-        }))
+
+      // Check if client has valid room after connect
+      const clientRoomId = client.getCurrentRoomId()
+      if (!clientRoomId || clientRoomId !== departmentRoomId) {
+        console.warn('[RECONNECT] Client connected but room restoration failed')
+        return false
       }
-      
+
+      console.log('🗳 [RECONNECT] Room restored successfully:', {
+        department_id: department.id,
+        room_id: clientRoomId
+      })
+
+      // Load message history
+      setChatState(prev => ({
+        ...prev,
+        isLoadingHistory: true
+      }))
+
+      const messages = await client.loadMessageHistory(clientRoomId)
+
+      // SUCCESS: Update state with all required fields
+      setChatState(prev => ({
+        ...prev,
+        isConnected: true,
+        isLoading: false,
+        isLoadingHistory: false,
+        matrixClient: client,
+        messages: messages || [],      // Always set messages
+        roomId: clientRoomId,
+        currentStep: 'chat',            // NOW show chat interface
+        error: undefined
+      }))
+
+      // Ensure department room ID is stored
+      setDepartmentRoomId(department.id, clientRoomId)
+
+      onConnect?.({
+        roomId: clientRoomId,
+        isReconnection: true,
+        department: department.name
+      })
+
+      return true  // Signal success
+
     } catch (error: any) {
-      console.error('❌ Reconnection failed:', error)
-      
+      console.error('❌ [RECONNECT] Reconnection failed:', error)
+
       const userFriendlyMessage = getUserFriendlyErrorMessage({
         department,
         action: 'reconnection',
         originalError: error
       })
-      
+
+      // PROPER error handling - clean up broken state
       setChatState(prev => ({
         ...prev,
         isLoading: false,
-        error: userFriendlyMessage
+        isLoadingHistory: false,
+        isConnected: false,          // Don't lie to user
+        matrixClient: undefined,      // Clear broken client
+        roomId: undefined,
+        messages: [],                 // Clear messages
+        currentStep: 'user-form',     // Go back to form
+        error: userFriendlyMessage || 'Failed to restore conversation. Please start a new chat.'
       }))
-      
-      logError('Reconnection failed', error, { 
+
+      // Clean up broken client
+      if (clientRef.current) {
+        try {
+          await clientRef.current.disconnect()
+        } catch (disconnectError) {
+          console.warn('[RECONNECT] Error during cleanup:', disconnectError)
+        }
+        clientRef.current = null
+      }
+
+      logError('Reconnection failed', error, {
         departmentId: department.id,
-        departmentRoomId: departmentRoomId 
+        departmentRoomId: getDepartmentRoomId(department.id)
       })
+
+      return false  // Signal failure
     }
   }
 
   // Attempt to reconnect in legacy mode (no departments)
-  const attemptLegacyReconnection = async (session: any) => {
+  const attemptLegacyReconnection = async (session: any): Promise<boolean> => {
     try {
-      setChatState(prev => ({ 
-        ...prev, 
-        isLoading: true, 
-        error: undefined 
+      setChatState(prev => ({
+        ...prev,
+        isLoading: true,
+        error: undefined
       }))
-      
-      
+
+      // Validate we have required data
+      if (!session.roomId || !session.userDetails) {
+        console.warn('[LEGACY_RECONNECT] Missing required data for reconnection')
+        return false
+      }
+
       // For legacy reconnection, also use the guest credentials from session
       let matrixConfig: any
       if (session.guestAccessToken && session.guestUserId) {
@@ -372,75 +529,86 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
           user_id: session.guestUserId
         }
       } else {
-        // Fallback to bot credentials if no guest credentials available
-        matrixConfig = config.matrix!
+        console.warn('[LEGACY_RECONNECT] No guest credentials available')
+        return false
       }
-      
+
       const client = new MatrixChatClient(matrixConfig)
       await client.connect()
       clientRef.current = client
-      
-      // Try to rejoin the existing room
-      if (session.roomId) {
-        try {
-          await client.joinRoom(session.roomId)
-          
-          // Load message history
-          setChatState(prev => ({ 
-            ...prev, 
-            isLoadingHistory: true 
-          }))
-          
-          const messages = await client.loadMessageHistory(session.roomId)
-          
-          setChatState(prev => ({
-            ...prev,
-            isConnected: true,
-            isLoading: false,
-            isLoadingHistory: false,
-            matrixClient: client,
-            messages: messages || [],
-            roomId: session.roomId,
-            currentStep: 'chat' // Ensure we go to chat view
-          }))
-          
-          onConnect?.({ 
-            roomId: session.roomId, 
-            isReconnection: true,
-            isLegacyMode: true 
-          })
-          
-        } catch (roomError: any) {
-          console.warn('⚠️ Could not rejoin legacy room:', roomError.message)
-          setChatState(prev => ({
-            ...prev,
-            isConnected: true,
-            isLoading: false,
-            matrixClient: client,
-            roomId: undefined,
-            currentStep: 'chat' // Still go to chat view so user can send new message
-          }))
-        }
+
+      // Check if client has valid room after connect
+      const clientRoomId = client.getCurrentRoomId()
+      if (!clientRoomId || clientRoomId !== session.roomId) {
+        console.warn('[LEGACY_RECONNECT] Client connected but room restoration failed')
+        return false
       }
-      
+
+      // Load message history
+      setChatState(prev => ({
+        ...prev,
+        isLoadingHistory: true
+      }))
+
+      const messages = await client.loadMessageHistory(session.roomId)
+
+      // SUCCESS: Update state with all required fields
+      setChatState(prev => ({
+        ...prev,
+        isConnected: true,
+        isLoading: false,
+        isLoadingHistory: false,
+        matrixClient: client,
+        messages: messages || [],
+        roomId: session.roomId,
+        currentStep: 'chat',  // Now show chat view
+        error: undefined
+      }))
+
+      onConnect?.({
+        roomId: session.roomId,
+        isReconnection: true,
+        isLegacyMode: true
+      })
+
+      return true  // Signal success
+
     } catch (error: any) {
-      console.error('❌ Legacy reconnection failed:', error)
-      
+      console.error('❌ [LEGACY_RECONNECT] Legacy reconnection failed:', error)
+
       const userFriendlyMessage = getUserFriendlyErrorMessage({
         department: null,
         action: 'reconnection',
         originalError: error
       })
-      
+
+      // PROPER error handling - clean up broken state
       setChatState(prev => ({
         ...prev,
         isLoading: false,
-        error: userFriendlyMessage
+        isLoadingHistory: false,
+        isConnected: false,
+        matrixClient: undefined,
+        roomId: undefined,
+        messages: [],
+        error: userFriendlyMessage || 'Failed to restore conversation. Please start a new chat.'
       }))
-      
-      logError('Legacy reconnection failed', error, { 
-        sessionRoomId: session.roomId 
+
+      // Clean up broken client
+      if (clientRef.current) {
+        try {
+          await clientRef.current.disconnect()
+        } catch (disconnectError) {
+          console.warn('[LEGACY_RECONNECT] Error during cleanup:', disconnectError)
+        }
+        clientRef.current = null
+      }
+
+      logError('Legacy reconnection failed', error, {
+        sessionRoomId: session.roomId
       })
+
+      return false  // Signal failure
     }
   }
 
@@ -477,6 +645,8 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
       ...prev,
       currentStep: 'department-selection',
       selectedDepartment: undefined,
+      selectedChannel: undefined,        // CRITICAL: Clear channel selection
+      selectedSocialMedia: undefined,    // CRITICAL: Clear social media selection
       roomId: undefined,
       isConnected: false,
       matrixClient: undefined,
@@ -971,24 +1141,8 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
                     <span className={styles.departmentName}>
                       {chatState.selectedDepartment.icon} {chatState.selectedDepartment.name}
                     </span>
-                    {/* Space context indicator */}
-                    {chatState.session?.spaceContext && config.widget.spaces?.showSpaceInHeader !== false && config.widget.spaces?.spaceIndicatorStyle !== 'hidden' && (
-                      <div className={styles.spaceIndicator} title="Matrix Space: Organized conversation">
-                        <svg className={styles.spaceIcon} width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M4 2H20C21.1 2 22 2.9 22 4V20C22 21.1 21.1 22 20 22H4C2.9 22 2 21.1 2 20V4C2.9 2 4 2.9 4 2ZM4 4V8H20V4H4ZM4 10V14H12V10H4ZM14 10V14H20V10H14ZM4 16V20H12V16H4ZM14 16V20H20V16H14Z"/>
-                        </svg>
-                        <span className={styles.spaceText}>
-                          {config.widget.spaces?.displayChannelOrigin !== false ? 'Web-Chat Space' : 'Space'}
-                          {config.widget.spaces?.spaceIndicatorStyle === 'detailed' && chatState.session?.spaceContext?.departmentSpaceId && (
-                            <span className={styles.spaceDetail}>
-                              → {chatState.selectedDepartment?.name}
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    )}
                     {config.departments && config.departments.length > 1 && (
-                      <button 
+                      <button
                         className={styles.switchDepartmentBtn}
                         onClick={handleSwitchDepartment}
                         aria-label="Switch department"

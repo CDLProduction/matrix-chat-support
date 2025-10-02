@@ -73,129 +73,80 @@ const SocialMediaIntegration: React.FC<SocialMediaIntegrationProps> = ({
             Connect via {channel.name}
           </h3>
           <p className={styles.selectorSubtitle}>
-            You'll be redirected to {channel.platform} to start your conversation
+            Chat with us on {channel.platform}
           </p>
         </div>
       </div>
 
       <div className={styles.socialMediaCard}>
-        <div
-          className={styles.socialMediaHeader}
-          style={{ '--platform-color': channel.color } as React.CSSProperties}
-        >
-          <div className={styles.platformInfo}>
-            <div className={styles.platformIcon}>
-              {channel.icon}
-            </div>
-            <div className={styles.platformDetails}>
-              <h4 className={styles.platformName}>
-                {channel.name}
-              </h4>
-              <p className={styles.platformType}>
-                {channel.platform} • {department.name}
-              </p>
-            </div>
-          </div>
-        </div>
+        <div style={{
+          padding: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px'
+        }}>
+          <p style={{
+            margin: '0',
+            fontSize: '15px',
+            lineHeight: '1.6',
+            color: '#374151',
+            textAlign: 'center'
+          }}>
+            Click the button below to open {channel.platform} and start chatting with our support team.
+          </p>
 
-        <div className={styles.socialMediaBody}>
-          <div className={styles.departmentInfo}>
-            <div className={styles.departmentIcon}>
-              {department.icon}
-            </div>
-            <div>
-              <h5 className={styles.departmentName}>
-                {department.name}
-              </h5>
-              <p className={styles.departmentDescription}>
-                {department.description}
-              </p>
-            </div>
-          </div>
-
-          {channel.config.botUsername && (
-            <div className={styles.botInfo}>
-              <h6 className={styles.botTitle}>
-                {channel.platform === 'telegram' ? 'Telegram Bot' : 'Bot Information'}
-              </h6>
-              <div className={styles.botDetails}>
-                <span className={styles.botUsername}>
-                  @{channel.config.botUsername}
-                </span>
-                {channel.platform === 'telegram' && (
-                  <div className={styles.directLink}>
-                    <span className={styles.linkLabel}>Direct link:</span>
-                    <a
-                      href={getTelegramBotUrl()}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={styles.botLink}
-                      onClick={() => setTimeout(() => onClose(), 500)}
-                    >
-                      t.me/{channel.config.botUsername}
-                    </a>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className={styles.instructionsList}>
-            <h6 className={styles.instructionsTitle}>
-              How to start chatting:
-            </h6>
-            <ol className={styles.instructions}>
-              <li>Click "Open {channel.name}" below to launch {channel.platform}</li>
-              {channel.platform === 'telegram' && (
-                <>
-                  <li>The bot will automatically detect your department ({department.name})</li>
-                  <li>Start typing your message - our team will respond shortly</li>
-                  <li>Continue the full conversation in Telegram</li>
-                  {channel.config.botUsername && (
-                    <li className={styles.alternativeInstruction}>
-                      <strong>Alternative:</strong> Search for "@{channel.config.botUsername}" in Telegram and send: {getDepartmentCommand()}
-                    </li>
-                  )}
-                </>
-              )}
-              {!['telegram'].includes(channel.platform) && (
-                <>
-                  <li>The bot will automatically detect your department ({department.name})</li>
-                  <li>Start typing your message - our team will respond shortly</li>
-                  <li>Continue the full conversation in {channel.platform}</li>
-                </>
-              )}
-            </ol>
-          </div>
-
-          {channel.config.workingHours?.enabled && (
-            <div className={styles.workingHours}>
-              <h6 className={styles.workingHoursTitle}>
-                ⏰ Support Hours
-              </h6>
-              <p className={styles.workingHoursInfo}>
-                Our team is available during business hours.
-                Outside of these hours, we'll respond as soon as possible.
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div className={styles.socialMediaActions}>
           <button
-            className={styles.continueButton}
             onClick={handlePlatformRedirect}
-            style={{ '--platform-color': channel.color } as React.CSSProperties}
+            style={{
+              backgroundColor: channel.color || '#0088cc',
+              color: 'white',
+              border: 'none',
+              padding: '14px 24px',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-1px)'
+              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)'
+            }}
           >
-            <span className={styles.buttonIcon}>
-              {channel.icon}
-            </span>
+            <span style={{ fontSize: '18px' }}>{channel.icon}</span>
             Open {channel.name}
           </button>
 
           <button
-            className={styles.cancelButton}
             onClick={onBack}
+            style={{
+              backgroundColor: 'transparent',
+              color: '#6b7280',
+              border: '1px solid #d1d5db',
+              padding: '12px 24px',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f9fafb'
+              e.currentTarget.style.borderColor = '#9ca3af'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent'
+              e.currentTarget.style.borderColor = '#d1d5db'
+            }}
           >
             Choose different method
           </button>

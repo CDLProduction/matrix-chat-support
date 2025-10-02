@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal Widget Test</title>
+    <link rel="stylesheet" href="/widget/style.css">
+    <style>
+        body {
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+        }
+        .status {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Minimal Widget Test</h1>
+    <div id="status" class="status">Loading widget...</div>
+
+    <script src="/widget/matrix-chat-widget.iife.js"></script>
+    <script>
+        console.log('Starting minimal widget test...');
+
+        // Simple config
+        const config = {
+            departments: [
+                {
+                    id: "support",
+                    name: "Support",
+                    description: "Get help",
+                    icon: "🎧",
+                    color: "#667eea",
+                    matrix: {
+                        homeserver: "http://localhost:8008",
+                        accessToken: "demo-token",
+                        botUserId: "@support:localhost"
+                    },
+                    widget: {
+                        greeting: "Hi! How can we help?"
+                    }
+                }
+            ],
+            widget: {
+                title: "Support Chat",
+                brandColor: "#667eea",
+                position: "bottom-right"
+            }
+        };
+
+        function updateStatus(message, isError = false) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.style.background = isError ? '#ffebee' : '#e8f5e8';
+            status.style.borderColor = isError ? '#f44336' : '#4caf50';
+            console.log(message);
+        }
+
+        // Wait for DOM to be ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initWidget);
+        } else {
+            initWidget();
+        }
+
+        function initWidget() {
+            console.log('DOM ready, checking for MatrixChatWidget...');
+
+            if (typeof window.MatrixChatWidget === 'undefined') {
+                updateStatus('❌ MatrixChatWidget not found', true);
+                return;
+            }
+
+            if (typeof window.MatrixChatWidget.init !== 'function') {
+                updateStatus('❌ MatrixChatWidget.init is not a function', true);
+                return;
+            }
+
+            updateStatus('✅ MatrixChatWidget found, initializing...');
+
+            try {
+                window.MatrixChatWidget.init(config);
+                updateStatus('✅ Widget initialized successfully!');
+
+                // Check for DOM elements after a delay
+                setTimeout(() => {
+                    const button = document.querySelector('.chatButton');
+                    const container = document.querySelector('#matrix-chat-widget-container');
+
+                    if (button) {
+                        updateStatus('✅ Widget loaded! Chat button should be visible in bottom-right corner.');
+                    } else if (container) {
+                        updateStatus('⚠️  Widget container found but no chat button visible.');
+                    } else {
+                        updateStatus('❌ No widget elements found in DOM', true);
+                    }
+                }, 1000);
+
+            } catch (error) {
+                updateStatus(`❌ Widget initialization failed: ${error.message}`, true);
+                console.error('Widget init error:', error);
+            }
+        }
+
+        // Global error handler
+        window.addEventListener('error', function(e) {
+            updateStatus(`❌ JavaScript error: ${e.message}`, true);
+            console.error('JavaScript error:', e);
+        });
+
+        console.log('Script loaded, waiting for DOM ready...');
+    </script>
+</body>
+</html>
