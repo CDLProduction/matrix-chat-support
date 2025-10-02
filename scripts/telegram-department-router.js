@@ -393,39 +393,40 @@ async function createDepartmentRoom(departmentId, telegramUser, telegramChatId) 
  * Send welcome message and department selection
  */
 async function sendWelcomeMessage(chatId) {
-  const welcomeMessage = `
-🎧 **Welcome to Customer Support!**
+  // Build dynamic welcome message from configured departments
+  let welcomeMessage = `🎧 *Welcome to Customer Support!*\n\nPlease select the department that best matches your needs:\n`;
 
-Please select the department that best matches your needs:
+  // Add each department dynamically
+  const departments = config.departments || [];
+  departments.forEach(dept => {
+    const command = TELEGRAM_DEPARTMENT_SPACES[dept.id]?.command || `/start_${dept.id}`;
+    const icon = dept.icon || '🎧';
+    welcomeMessage += `\n${icon} *${dept.name}*\n${dept.description || ''}\nCommand: ${command}\n`;
+  });
 
-🎧 **/start_support** - General Support
-Technical help and general inquiries
+  welcomeMessage += `\nJust tap one of the buttons below or type a command to get started!`;
 
-💼 **/start_tech** - Tech Support
-Advanced technical assistance
+  // Build inline keyboard buttons dynamically
+  const inlineKeyboard = [];
+  let currentRow = [];
 
-🔒 **/start_id** - Account Verification
-Identity verification and account issues
+  departments.forEach((dept, index) => {
+    const icon = dept.icon || '🎧';
+    currentRow.push({
+      text: `${icon} ${dept.name}`,
+      callback_data: `dept_${dept.id}`
+    });
 
-💰 **/start_commerce** - Sales & Commerce
-Purchase questions and order support
-
-Just tap one of the commands above to get started!
-`;
+    // Create rows of 2 buttons each
+    if (currentRow.length === 2 || index === departments.length - 1) {
+      inlineKeyboard.push([...currentRow]);
+      currentRow = [];
+    }
+  });
 
   await bot.sendMessage(chatId, welcomeMessage, {
-    parse_mode: 'Markdown',
     reply_markup: {
-      inline_keyboard: [
-        [
-          { text: '🎧 General Support', callback_data: 'dept_support' },
-          { text: '💼 Tech Support', callback_data: 'dept_tech_support' }
-        ],
-        [
-          { text: '🔒 Account Verification', callback_data: 'dept_identification' },
-          { text: '💰 Sales & Commerce', callback_data: 'dept_commerce' }
-        ]
-      ]
+      inline_keyboard: inlineKeyboard
     }
   });
 }
