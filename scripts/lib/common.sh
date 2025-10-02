@@ -266,6 +266,45 @@ check_command() {
   return 0
 }
 
+check_docker_compose() {
+  print_info "Checking Docker Compose..."
+
+  # Try docker compose (v2) first
+  if docker compose version &> /dev/null 2>&1; then
+    local version=$(docker compose version --short 2>/dev/null || echo "unknown")
+    print_success "Docker Compose v2 found ($version)"
+    return 0
+  fi
+
+  # Try docker-compose (v1)
+  if command -v docker-compose &> /dev/null; then
+    # Test if it actually works (not broken by missing dependencies)
+    if docker-compose version &> /dev/null 2>&1; then
+      local version=$(docker-compose version --short 2>/dev/null || echo "unknown")
+      print_success "Docker Compose v1 found ($version)"
+      return 0
+    else
+      print_error "docker-compose is installed but broken (likely missing Python distutils)"
+      echo ""
+      print_info "On Ubuntu 24.04, install Docker Compose v2 plugin:"
+      echo "  sudo apt update"
+      echo "  sudo apt install docker-compose-plugin"
+      echo ""
+      return 1
+    fi
+  fi
+
+  # Neither version found
+  print_error "Docker Compose not found"
+  echo ""
+  print_info "Install Docker Compose v2 (recommended):"
+  echo "  sudo apt update"
+  echo "  sudo apt install docker-compose-plugin"
+  echo ""
+  print_info "Or visit: https://docs.docker.com/compose/install/"
+  return 1
+}
+
 check_port_available() {
   local port="$1"
 

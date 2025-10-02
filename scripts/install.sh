@@ -32,6 +32,7 @@ check_prerequisites() {
   echo ""
 
   check_command "docker" "Docker" || all_ok=false
+  check_docker_compose || all_ok=false
   check_command "node" "Node.js" "18" || all_ok=false
   check_command "npm" "npm" || all_ok=false
   check_command "curl" "curl" || all_ok=false
