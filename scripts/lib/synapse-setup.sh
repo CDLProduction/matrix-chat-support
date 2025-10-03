@@ -187,6 +187,16 @@ setup_synapse_docker() {
     error_exit "docker-compose.yml not found in current directory"
   fi
 
+  # Stop any existing Synapse container to prevent port conflicts
+  print_info "Stopping any existing Synapse containers..."
+  if command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1; then
+    docker compose stop synapse 2>/dev/null || true
+    docker compose rm -f synapse 2>/dev/null || true
+  elif command -v docker-compose &> /dev/null; then
+    docker-compose stop synapse 2>/dev/null || true
+    docker-compose rm -f synapse 2>/dev/null || true
+  fi
+
   # Start Docker services - try v2 first, fallback to v1
   if command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1; then
     docker compose up -d postgres synapse synapse-admin element || {
@@ -208,16 +218,32 @@ wait_for_synapse() {
 
   print_step "Waiting for Synapse to be ready..."
 
-  wait_for_url "${homeserver_url}/health" 60 || {
+  # Give Synapse more time for initial database migration
+  # First startup can take longer due to schema creation
+  wait_for_url "${homeserver_url}/health" 120 || {
     print_error "Synapse did not start properly"
+
+    # Check if container is running
+    local container_status=""
     if docker compose version &> /dev/null 2>&1; then
-      print_info "Check logs with: docker compose logs synapse"
+      container_status=$(docker compose ps synapse --format json 2>/dev/null | jq -r '.State // "unknown"')
+      print_info "Container status: $container_status"
+      print_info "Check logs with: docker compose logs --tail=100 synapse"
     else
-      print_info "Check logs with: docker-compose logs synapse"
+      container_status=$(docker-compose ps synapse --format json 2>/dev/null | jq -r '.State // "unknown"')
+      print_info "Container status: $container_status"
+      print_info "Check logs with: docker-compose logs --tail=100 synapse"
     fi
+
+    # If container is restarting, it's likely a configuration issue
+    if [ "$container_status" = "restarting" ]; then
+      print_error "Container is in restart loop - check configuration"
+    fi
+
     return 1
   }
 
+  print_success "Synapse is ready and responding"
   return 0
 }
 
