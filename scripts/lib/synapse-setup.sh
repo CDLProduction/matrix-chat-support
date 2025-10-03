@@ -70,6 +70,14 @@ PYTHON_SCRIPT
     rm -f data/homeserver.yaml
   fi
 
+  # CRITICAL: Set data directory ownership to UID 991 BEFORE generating config
+  # This allows Synapse running as UID 991 to create and modify files
+  print_info "Preparing data directory for Synapse (UID 991)..."
+  sudo chown -R 991:991 data/ 2>/dev/null || {
+    print_warning "Could not set ownership, using fallback..."
+    sudo chmod -R 777 data/ 2>/dev/null || true
+  }
+
   # Generate config using Synapse Docker container
   print_info "Running Synapse config generator..."
 
@@ -155,31 +163,28 @@ PYTHON_SCRIPT
     error_exit "Failed to update Synapse configuration with PostgreSQL settings"
   }
 
-  # Fix ownership for Synapse container (runs as UID 991)
-  # Only change Synapse-specific files, NOT install-session.json
-  print_info "Setting correct file permissions for Synapse..."
-
   # Create media_store directory if it doesn't exist
   if [ ! -d "data/media_store" ]; then
     mkdir -p data/media_store || error_exit "Failed to create media_store directory"
     print_info "Created media_store directory"
+    sudo chown 991:991 data/media_store 2>/dev/null || sudo chmod 777 data/media_store
   fi
 
-  # Set ownership and permissions for Synapse files
-  # Synapse container runs as UID 991 (not a system user on Ubuntu)
-  # Use 644 for config files and 755 for directories to allow Synapse to read/write
-  print_info "Setting ownership to UID 991..."
-  if sudo chown -R 991:991 data/homeserver.yaml data/localhost.signing.key data/localhost.log.config data/media_store 2>/dev/null; then
-    # Set proper permissions: 644 for files (owner can write), 755 for directories
-    sudo chmod 644 data/homeserver.yaml data/localhost.log.config 2>/dev/null || true
-    sudo chmod 600 data/localhost.signing.key 2>/dev/null || true  # signing key should be owner-only
-    sudo chmod 755 data/media_store 2>/dev/null || true
-    print_success "Set ownership and permissions for Synapse files"
-  else
-    print_warning "Could not set ownership to UID 991, using fallback permissions..."
-    # Fallback: make files world-readable/writable
-    sudo chmod 666 data/homeserver.yaml data/localhost.signing.key data/localhost.log.config 2>/dev/null || true
-    sudo chmod 777 data/media_store 2>/dev/null || true
+  # Ensure entire data directory is owned by UID 991, except install-session.json
+  print_info "Finalizing permissions for Synapse..."
+
+  # Save install-session.json permissions
+  if [ -f "data/install-session.json" ]; then
+    local session_user=$(stat -c '%U' data/install-session.json 2>/dev/null || stat -f '%Su' data/install-session.json)
+    local session_group=$(stat -c '%G' data/install-session.json 2>/dev/null || stat -f '%Sg' data/install-session.json)
+  fi
+
+  # Set ownership of entire data directory to UID 991
+  sudo chown -R 991:991 data/ 2>/dev/null || sudo chmod -R 777 data/
+
+  # Restore install-session.json ownership if it existed
+  if [ -f "data/install-session.json" ] && [ -n "$session_user" ]; then
+    sudo chown "$session_user:$session_group" data/install-session.json 2>/dev/null || true
   fi
 
   print_success "Synapse configuration generated and configured for PostgreSQL"
