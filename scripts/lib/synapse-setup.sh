@@ -197,10 +197,7 @@ setup_synapse_docker() {
     docker-compose rm -f synapse 2>/dev/null || true
   fi
 
-  # Temporarily disable auto-restart for Synapse during installation
-  print_info "Configuring Synapse for initial setup (no auto-restart)..."
-
-  # Start Synapse with restart: "no" to prevent restart loops during initial setup
+  # Determine compose command
   if command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1; then
     COMPOSE_CMD="docker compose"
   elif command -v docker-compose &> /dev/null; then
@@ -209,17 +206,25 @@ setup_synapse_docker() {
     error_exit "Neither 'docker compose' nor 'docker-compose' is available"
   fi
 
+  # Create temporary docker-compose override to disable restart during installation
+  print_info "Creating temporary no-restart configuration..."
+  cat > docker-compose.override.yml << 'EOF'
+version: '3.8'
+services:
+  synapse:
+    restart: "no"
+EOF
+
   # Start postgres first
   $COMPOSE_CMD up -d postgres || error_exit "Failed to start PostgreSQL"
 
-  # Start Synapse with override to disable restart policy
-  $COMPOSE_CMD run -d --name matrix-synapse --service-ports --no-deps \
-    --rm synapse || error_exit "Failed to start Synapse"
+  # Start Synapse with no-restart override
+  $COMPOSE_CMD up -d synapse || error_exit "Failed to start Synapse"
 
   # Start other services
   $COMPOSE_CMD up -d synapse-admin element 2>/dev/null || true
 
-  print_success "Docker services started (initial setup mode)"
+  print_success "Docker services started (initial setup mode - no auto-restart)"
 }
 
 wait_for_synapse() {

@@ -620,6 +620,23 @@ main() {
   # Optional systemd installation
   setup_systemd
 
+  # Remove temporary docker-compose override file
+  if [ -f "docker-compose.override.yml" ]; then
+    print_step "Cleaning up temporary installation files..."
+    rm -f docker-compose.override.yml
+    print_info "Removed docker-compose.override.yml"
+
+    # Restart Synapse with normal restart policy
+    print_info "Restarting Synapse with production restart policy..."
+    if docker compose version &> /dev/null 2>&1; then
+      docker compose stop synapse
+      docker compose up -d synapse
+    else
+      docker-compose stop synapse
+      docker-compose up -d synapse
+    fi
+  fi
+
   print_success "🎉 Installation complete!"
   echo ""
 }
