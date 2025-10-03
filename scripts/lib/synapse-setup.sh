@@ -15,6 +15,36 @@ generate_synapse_config() {
   # Check if homeserver.yaml already exists and is valid
   if [ -f "data/homeserver.yaml" ] && grep -q "database:" data/homeserver.yaml 2>/dev/null; then
     print_success "Synapse configuration already exists"
+
+    # Still need to clean up app_service_config_files if present
+    print_info "Cleaning up configuration..."
+    sudo chown -R $(whoami):$(whoami) data/ 2>/dev/null || true
+
+    python3 << 'PYTHON_SCRIPT' || {
+import yaml
+import sys
+
+try:
+    with open('data/homeserver.yaml', 'r') as f:
+        config = yaml.safe_load(f)
+
+    # Remove app_service_config_files if present
+    if 'app_service_config_files' in config:
+        del config['app_service_config_files']
+
+        with open('data/homeserver.yaml', 'w') as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+        print("Removed app_service_config_files from existing config", file=sys.stderr)
+
+    sys.exit(0)
+except Exception as e:
+    print(f"Error: {e}", file=sys.stderr)
+    sys.exit(1)
+PYTHON_SCRIPT
+      print_warning "Failed to clean existing config"
+    }
+
     return 0
   fi
 
