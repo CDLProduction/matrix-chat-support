@@ -158,13 +158,22 @@ PYTHON_SCRIPT
   # Fix ownership for Synapse container (runs as UID 991)
   # Only change Synapse-specific files, NOT install-session.json
   print_info "Setting correct file permissions for Synapse..."
-  sudo chown 991:991 data/homeserver.yaml data/localhost.signing.key data/localhost.log.config 2>/dev/null || {
-    print_warning "Could not set ownership to 991:991"
-  }
 
-  # Ensure media directory is writable by Synapse
-  if [ -d "data/media_store" ]; then
-    sudo chown -R 991:991 data/media_store 2>/dev/null || true
+  # Create media_store directory if it doesn't exist
+  if [ ! -d "data/media_store" ]; then
+    mkdir -p data/media_store || error_exit "Failed to create media_store directory"
+    print_info "Created media_store directory"
+  fi
+
+  # Set ownership using numeric UID to avoid username lookup issues
+  # Synapse container runs as UID 991 (not a system user on Ubuntu)
+  if sudo chown -R 991:991 data/homeserver.yaml data/localhost.signing.key data/localhost.log.config data/media_store 2>/dev/null; then
+    print_success "Set ownership to UID 991 for Synapse files"
+  else
+    print_warning "Could not set ownership to UID 991, setting permissive permissions..."
+    # Fallback: make files readable and directories writable for all
+    sudo chmod 666 data/homeserver.yaml data/localhost.signing.key data/localhost.log.config 2>/dev/null || true
+    sudo chmod 777 data/media_store 2>/dev/null || true
   fi
 
   print_success "Synapse configuration generated and configured for PostgreSQL"
