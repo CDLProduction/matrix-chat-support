@@ -165,13 +165,19 @@ PYTHON_SCRIPT
     print_info "Created media_store directory"
   fi
 
-  # Set ownership using numeric UID to avoid username lookup issues
+  # Set ownership and permissions for Synapse files
   # Synapse container runs as UID 991 (not a system user on Ubuntu)
+  # Use 644 for config files and 755 for directories to allow Synapse to read/write
+  print_info "Setting ownership to UID 991..."
   if sudo chown -R 991:991 data/homeserver.yaml data/localhost.signing.key data/localhost.log.config data/media_store 2>/dev/null; then
-    print_success "Set ownership to UID 991 for Synapse files"
+    # Set proper permissions: 644 for files (owner can write), 755 for directories
+    sudo chmod 644 data/homeserver.yaml data/localhost.log.config 2>/dev/null || true
+    sudo chmod 600 data/localhost.signing.key 2>/dev/null || true  # signing key should be owner-only
+    sudo chmod 755 data/media_store 2>/dev/null || true
+    print_success "Set ownership and permissions for Synapse files"
   else
-    print_warning "Could not set ownership to UID 991, setting permissive permissions..."
-    # Fallback: make files readable and directories writable for all
+    print_warning "Could not set ownership to UID 991, using fallback permissions..."
+    # Fallback: make files world-readable/writable
     sudo chmod 666 data/homeserver.yaml data/localhost.signing.key data/localhost.log.config 2>/dev/null || true
     sudo chmod 777 data/media_store 2>/dev/null || true
   fi
