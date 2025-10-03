@@ -89,6 +89,14 @@ PYTHON_SCRIPT
     error_exit "Failed to copy log configuration"
   }
 
+  # Set ownership of data directory to UID 991 BEFORE generating signing key
+  # This is critical - Synapse runs as UID 991 and needs to write the signing key
+  print_info "Setting data directory ownership for Synapse (UID 991)..."
+  sudo chown -R 991:991 data/ 2>/dev/null || {
+    print_warning "Could not set ownership to UID 991, using permissive mode..."
+    sudo chmod -R 777 data/ 2>/dev/null || true
+  }
+
   # Generate signing key using Docker
   print_info "Generating signing key..."
   docker run --rm \
