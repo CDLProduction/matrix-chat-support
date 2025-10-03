@@ -155,6 +155,13 @@ PYTHON_SCRIPT
     error_exit "Failed to update Synapse configuration with PostgreSQL settings"
   }
 
+  # Fix ownership for Synapse container (runs as UID 991)
+  print_info "Setting correct file permissions for Synapse..."
+  sudo chown -R 991:991 data/ 2>/dev/null || {
+    print_warning "Could not set ownership to 991:991, trying current user..."
+    sudo chown -R $(whoami):$(whoami) data/ 2>/dev/null || true
+  }
+
   print_success "Synapse configuration generated and configured for PostgreSQL"
 }
 
