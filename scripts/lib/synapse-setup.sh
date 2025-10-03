@@ -156,11 +156,16 @@ PYTHON_SCRIPT
   }
 
   # Fix ownership for Synapse container (runs as UID 991)
+  # Only change Synapse-specific files, NOT install-session.json
   print_info "Setting correct file permissions for Synapse..."
-  sudo chown -R 991:991 data/ 2>/dev/null || {
-    print_warning "Could not set ownership to 991:991, trying current user..."
-    sudo chown -R $(whoami):$(whoami) data/ 2>/dev/null || true
+  sudo chown 991:991 data/homeserver.yaml data/localhost.signing.key data/localhost.log.config 2>/dev/null || {
+    print_warning "Could not set ownership to 991:991"
   }
+
+  # Ensure media directory is writable by Synapse
+  if [ -d "data/media_store" ]; then
+    sudo chown -R 991:991 data/media_store 2>/dev/null || true
+  fi
 
   print_success "Synapse configuration generated and configured for PostgreSQL"
 }
