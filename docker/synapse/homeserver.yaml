@@ -34,11 +34,11 @@ database:
     cp_min: 5
     cp_max: 10
 
-# Redis
-redis:
-  enabled: true
-  host: redis
-  port: 6379
+# Redis (optional - uncomment if using Redis)
+# redis:
+#   enabled: true
+#   host: redis
+#   port: 6379
 
 # Logging
 log_config: "/data/localhost.log.config"

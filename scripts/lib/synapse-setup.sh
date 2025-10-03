@@ -12,138 +12,104 @@ generate_synapse_config() {
 
   print_step "Generating Synapse configuration..."
 
+  # Ensure data directory exists with current user ownership initially
+  mkdir -p data/media_store
+
   # Check if homeserver.yaml already exists and is valid
   if [ -f "data/homeserver.yaml" ] && grep -q "database:" data/homeserver.yaml 2>/dev/null; then
     print_success "Synapse configuration already exists"
-
-    # Still need to clean up and fix existing config
-    print_info "Cleaning up and fixing configuration..."
-    sudo chown -R $(whoami):$(whoami) data/ 2>/dev/null || true
-
-    python3 << 'PYTHON_SCRIPT' || {
-import yaml
-import sys
-
-try:
-    with open('data/homeserver.yaml', 'r') as f:
-        config = yaml.safe_load(f)
-
-    modified = False
-
-    # Remove app_service_config_files if present
-    if 'app_service_config_files' in config:
-        del config['app_service_config_files']
-        modified = True
-
-    # Add public_baseurl if missing
-    if 'public_baseurl' not in config:
-        config['public_baseurl'] = 'http://localhost:8008/'
-        modified = True
-
-    # Fix listeners to include bind_addresses if missing
-    if 'listeners' in config and isinstance(config['listeners'], list):
-        for listener in config['listeners']:
-            if listener.get('port') == 8008:
-                if 'bind_addresses' not in listener:
-                    listener['bind_addresses'] = ['::1', '127.0.0.1', '0.0.0.0']
-                    modified = True
-
-    if modified:
-        with open('data/homeserver.yaml', 'w') as f:
-            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-        print("Fixed existing configuration", file=sys.stderr)
-
-    sys.exit(0)
-except Exception as e:
-    print(f"Error: {e}", file=sys.stderr)
-    sys.exit(1)
-PYTHON_SCRIPT
-      print_warning "Failed to clean existing config"
-    }
-
     return 0
   fi
 
-  # Clean up any broken partial config
-  if [ -f "data/homeserver.yaml" ]; then
-    print_warning "Removing incomplete Synapse configuration"
-    rm -f data/homeserver.yaml
-  fi
-
-  # Copy pre-made configuration template
-  print_info "Copying Synapse configuration template..."
+  # Copy pre-made configuration templates
+  print_info "Copying Synapse configuration templates..."
 
   if [ ! -f "docker/synapse/homeserver.yaml" ]; then
     error_exit "Configuration template not found at docker/synapse/homeserver.yaml"
+  fi
+
+  if [ ! -f "docker/synapse/localhost.log.config" ]; then
+    error_exit "Log config template not found at docker/synapse/localhost.log.config"
   fi
 
   cp docker/synapse/homeserver.yaml data/homeserver.yaml || {
     error_exit "Failed to copy configuration template"
   }
 
-  if [ ! -f "docker/synapse/localhost.log.config" ]; then
-    error_exit "Log config template not found at docker/synapse/localhost.log.config"
-  fi
-
   cp docker/synapse/localhost.log.config data/localhost.log.config || {
     error_exit "Failed to copy log configuration"
   }
 
-  # Create media_store directory BEFORE changing ownership
-  print_info "Creating media_store directory..."
-  if [ ! -d "data/media_store" ]; then
-    mkdir -p data/media_store || error_exit "Failed to create media_store directory"
-  fi
+  print_success "Configuration templates copied"
 
-  # Verify config was created
-  if [ ! -f "data/homeserver.yaml" ]; then
-    error_exit "Synapse configuration was not created"
-  fi
+  # Customize configuration based on user inputs
+  print_info "Customizing configuration..."
 
-  print_info "Verifying configuration..."
+  # Get port from session file
+  local config_port=$(jq -r '.matrix.port // "8008"' "$INSTALL_SESSION_FILE" 2>/dev/null || echo "8008")
+  local config_domain=$(jq -r '.matrix.domain // "localhost"' "$INSTALL_SESSION_FILE" 2>/dev/null || echo "localhost")
 
-  # The template already has PostgreSQL configured, just verify it
-  if ! grep -q "name: psycopg2" data/homeserver.yaml; then
-    error_exit "Configuration template is invalid - PostgreSQL not configured"
-  fi
+  # Use Python to safely modify YAML configuration
+  python3 << EOF || error_exit "Failed to customize configuration"
+import yaml
+import sys
 
-  # Verify database username matches docker-compose.yml (synapse_user, not synapse)
-  if ! grep -q "user: synapse_user" data/homeserver.yaml; then
-    print_warning "Fixing database username in configuration..."
-    sed -i.bak 's/user: synapse$/user: synapse_user/' data/homeserver.yaml 2>/dev/null || \
-    sed -i '' 's/user: synapse$/user: synapse_user/' data/homeserver.yaml 2>/dev/null
-  fi
+try:
+    # Load configuration
+    with open('data/homeserver.yaml', 'r') as f:
+        config = yaml.safe_load(f)
 
-  # Set ownership of entire data directory to UID 991 BEFORE Synapse starts
-  # This is critical - Synapse runs as UID 991 and needs to create the signing key
-  print_info "Setting data directory ownership for Synapse (UID 991)..."
-  sudo chown -R 991:991 data/ 2>/dev/null || {
-    print_warning "Could not set ownership to UID 991, using permissive mode..."
-    sudo chmod -R 777 data/ 2>/dev/null || true
-  }
+    # Update server_name if not localhost
+    if '$config_domain' != 'localhost':
+        config['server_name'] = '$config_domain'
 
-  # Note: The signing key will be auto-generated by Synapse on first startup
-  # No need to pre-generate it - Synapse will create it automatically
-  print_info "Signing key will be auto-generated by Synapse on first startup"
+    # Update port in listeners
+    if 'listeners' in config:
+        for listener in config['listeners']:
+            if listener.get('type') == 'http':
+                listener['port'] = int('$config_port')
+                # Ensure bind_addresses includes 0.0.0.0
+                if 'bind_addresses' not in listener:
+                    listener['bind_addresses'] = ['0.0.0.0']
+                elif '0.0.0.0' not in listener['bind_addresses']:
+                    listener['bind_addresses'].append('0.0.0.0')
 
-  # Ensure entire data directory is owned by UID 991, except install-session.json
-  print_info "Finalizing permissions for Synapse..."
+    # Update public_baseurl
+    config['public_baseurl'] = f"http://{config['server_name']}:$config_port/"
 
-  # Save install-session.json permissions
-  if [ -f "data/install-session.json" ]; then
-    local session_user=$(stat -c '%U' data/install-session.json 2>/dev/null || stat -f '%Su' data/install-session.json)
-    local session_group=$(stat -c '%G' data/install-session.json 2>/dev/null || stat -f '%Sg' data/install-session.json)
-  fi
+    # Ensure database is configured for PostgreSQL with correct username
+    if 'database' not in config:
+        config['database'] = {}
 
-  # Set ownership of entire data directory to UID 991
-  sudo chown -R 991:991 data/ 2>/dev/null || sudo chmod -R 777 data/
+    config['database']['name'] = 'psycopg2'
+    if 'args' not in config['database']:
+        config['database']['args'] = {}
 
-  # Restore install-session.json ownership if it existed
-  if [ -f "data/install-session.json" ] && [ -n "$session_user" ]; then
-    sudo chown "$session_user:$session_group" data/install-session.json 2>/dev/null || true
-  fi
+    config['database']['args'].update({
+        'user': 'synapse_user',
+        'password': 'synapse_password',
+        'database': 'synapse',
+        'host': 'postgres',
+        'port': 5432,
+        'cp_min': 5,
+        'cp_max': 10
+    })
 
-  print_success "Synapse configuration generated and configured for PostgreSQL"
+    # Ensure signing_key_path is set
+    if 'signing_key_path' not in config:
+        config['signing_key_path'] = '/data/${config_domain}.signing.key'
+
+    # Save updated configuration
+    with open('data/homeserver.yaml', 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False, width=1000)
+
+    print("✓ Configuration customized successfully", file=sys.stderr)
+except Exception as e:
+    print(f"✗ Error customizing config: {e}", file=sys.stderr)
+    sys.exit(1)
+EOF
+
+  print_success "Synapse configuration customized for port $config_port and domain $config_domain"
 }
 
 setup_synapse_docker() {
@@ -152,16 +118,6 @@ setup_synapse_docker() {
   # Check if docker-compose.yml exists
   if [ ! -f "docker-compose.yml" ]; then
     error_exit "docker-compose.yml not found in current directory"
-  fi
-
-  # Stop any existing Synapse container to prevent port conflicts
-  print_info "Stopping any existing Synapse containers..."
-  if command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1; then
-    docker compose stop synapse 2>/dev/null || true
-    docker compose rm -f synapse 2>/dev/null || true
-  elif command -v docker-compose &> /dev/null; then
-    docker-compose stop synapse 2>/dev/null || true
-    docker-compose rm -f synapse 2>/dev/null || true
   fi
 
   # Determine compose command
@@ -173,25 +129,65 @@ setup_synapse_docker() {
     error_exit "Neither 'docker compose' nor 'docker-compose' is available"
   fi
 
-  # Create temporary docker-compose override to disable restart during installation
+  # Stop any existing containers to prevent conflicts
+  print_info "Stopping any existing containers..."
+  $COMPOSE_CMD down 2>/dev/null || true
+
+  # Set ownership of data directory to UID 991 (Synapse user) BEFORE starting
+  # This allows Synapse to create signing keys and write logs on first startup
+  print_info "Setting data directory permissions for Synapse (UID 991)..."
+
+  # Preserve install-session.json ownership if it exists
+  local session_file_backup=""
+  if [ -f "data/install-session.json" ]; then
+    session_file_backup=$(mktemp)
+    cp data/install-session.json "$session_file_backup" 2>/dev/null || true
+  fi
+
+  # Set ownership to UID 991 (Synapse container user)
+  sudo chown -R 991:991 data/ 2>/dev/null || {
+    print_warning "Could not set ownership to UID 991, using permissive mode..."
+    sudo chmod -R 777 data/ 2>/dev/null || true
+  }
+
+  # Restore install-session.json with current user ownership
+  if [ -n "$session_file_backup" ] && [ -f "$session_file_backup" ]; then
+    cp "$session_file_backup" data/install-session.json
+    rm -f "$session_file_backup"
+  fi
+
+  # Create temporary docker-compose override to disable auto-restart during installation
   print_info "Creating temporary no-restart configuration..."
   cat > docker-compose.override.yml << 'EOF'
 version: '3.8'
 services:
   synapse:
     restart: "no"
+  postgres:
+    restart: "no"
 EOF
 
-  # Start postgres first
+  # Start PostgreSQL first and wait for it to be ready
+  print_info "Starting PostgreSQL..."
   $COMPOSE_CMD up -d postgres || error_exit "Failed to start PostgreSQL"
 
-  # Start Synapse with no-restart override
+  sleep 5
+
+  # Verify PostgreSQL is ready
+  if ! docker exec postgres pg_isready -U synapse_user > /dev/null 2>&1; then
+    print_warning "PostgreSQL not ready yet, waiting..."
+    sleep 5
+  fi
+
+  # Start Synapse (will auto-generate signing key on first run)
+  print_info "Starting Synapse..."
   $COMPOSE_CMD up -d synapse || error_exit "Failed to start Synapse"
 
-  # Start other services
+  # Start optional services
+  print_info "Starting admin interface and Element..."
   $COMPOSE_CMD up -d synapse-admin element 2>/dev/null || true
 
-  print_success "Docker services started (initial setup mode - no auto-restart)"
+  print_success "Docker services started (installation mode)"
 }
 
 wait_for_synapse() {
