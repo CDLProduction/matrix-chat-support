@@ -16,8 +16,8 @@ generate_synapse_config() {
   if [ -f "data/homeserver.yaml" ] && grep -q "database:" data/homeserver.yaml 2>/dev/null; then
     print_success "Synapse configuration already exists"
 
-    # Still need to clean up app_service_config_files if present
-    print_info "Cleaning up configuration..."
+    # Still need to clean up and fix existing config
+    print_info "Cleaning up and fixing configuration..."
     sudo chown -R $(whoami):$(whoami) data/ 2>/dev/null || true
 
     python3 << 'PYTHON_SCRIPT' || {
@@ -28,14 +28,30 @@ try:
     with open('data/homeserver.yaml', 'r') as f:
         config = yaml.safe_load(f)
 
+    modified = False
+
     # Remove app_service_config_files if present
     if 'app_service_config_files' in config:
         del config['app_service_config_files']
+        modified = True
 
+    # Add public_baseurl if missing
+    if 'public_baseurl' not in config:
+        config['public_baseurl'] = 'http://localhost:8008/'
+        modified = True
+
+    # Fix listeners to include bind_addresses if missing
+    if 'listeners' in config and isinstance(config['listeners'], list):
+        for listener in config['listeners']:
+            if listener.get('port') == 8008:
+                if 'bind_addresses' not in listener:
+                    listener['bind_addresses'] = ['::1', '127.0.0.1', '0.0.0.0']
+                    modified = True
+
+    if modified:
         with open('data/homeserver.yaml', 'w') as f:
             yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-
-        print("Removed app_service_config_files from existing config", file=sys.stderr)
+        print("Fixed existing configuration", file=sys.stderr)
 
     sys.exit(0)
 except Exception as e:
@@ -86,8 +102,7 @@ PYTHON_SCRIPT
   # Backup original SQLite config
   cp data/homeserver.yaml data/homeserver.yaml.sqlite.bak 2>/dev/null || true
 
-  # Replace SQLite database section with PostgreSQL
-  # Find the database section and replace it
+  # Replace SQLite database section with PostgreSQL and add critical settings
   python3 << 'PYTHON_SCRIPT' || {
 import yaml
 import sys
@@ -114,6 +129,15 @@ try:
     # Enable registration
     config['enable_registration'] = True
     config['enable_registration_without_verification'] = True
+
+    # Add public_baseurl (critical for proper operation)
+    config['public_baseurl'] = 'http://localhost:8008/'
+
+    # Fix listeners to include bind_addresses (critical for Docker networking)
+    if 'listeners' in config and isinstance(config['listeners'], list):
+        for listener in config['listeners']:
+            if listener.get('port') == 8008:
+                listener['bind_addresses'] = ['::1', '127.0.0.1', '0.0.0.0']
 
     # Remove app_service_config_files if present (will be added later if Telegram enabled)
     if 'app_service_config_files' in config:
