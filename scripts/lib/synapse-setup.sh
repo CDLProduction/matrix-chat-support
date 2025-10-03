@@ -70,31 +70,33 @@ PYTHON_SCRIPT
     rm -f data/homeserver.yaml
   fi
 
-  # CRITICAL: Set data directory ownership to UID 991 BEFORE generating config
-  # This allows Synapse running as UID 991 to create and modify files
-  print_info "Preparing data directory for Synapse (UID 991)..."
-  sudo chown -R 991:991 data/ 2>/dev/null || {
-    print_warning "Could not set ownership, using fallback..."
-    sudo chmod -R 777 data/ 2>/dev/null || true
-  }
+  # Copy pre-made configuration template
+  print_info "Copying Synapse configuration template..."
 
-  # Generate config using Synapse Docker container
-  print_info "Running Synapse config generator..."
-
-  # Use localhost as default if server_name is empty or "null"
-  local final_server_name="${server_name:-localhost}"
-  if [ "$final_server_name" = "null" ] || [ -z "$final_server_name" ]; then
-    final_server_name="localhost"
+  if [ ! -f "docker/synapse/homeserver.yaml" ]; then
+    error_exit "Configuration template not found at docker/synapse/homeserver.yaml"
   fi
 
-  print_info "Generating config for server: $final_server_name"
+  cp docker/synapse/homeserver.yaml data/homeserver.yaml || {
+    error_exit "Failed to copy configuration template"
+  }
 
+  if [ ! -f "docker/synapse/localhost.log.config" ]; then
+    error_exit "Log config template not found at docker/synapse/localhost.log.config"
+  fi
+
+  cp docker/synapse/localhost.log.config data/localhost.log.config || {
+    error_exit "Failed to copy log configuration"
+  }
+
+  # Generate signing key using Docker
+  print_info "Generating signing key..."
   docker run --rm \
     -v "$(pwd)/data:/data" \
-    -e SYNAPSE_SERVER_NAME="$final_server_name" \
-    -e SYNAPSE_REPORT_STATS=no \
-    matrixdotorg/synapse:v1.113.0 generate || {
-      error_exit "Failed to generate Synapse configuration"
+    -e SYNAPSE_SERVER_NAME="localhost" \
+    matrixdotorg/synapse:v1.113.0 \
+    generate-keys -c /data/homeserver.yaml || {
+      error_exit "Failed to generate signing key"
     }
 
   # Verify config was created
@@ -102,66 +104,12 @@ PYTHON_SCRIPT
     error_exit "Synapse configuration was not created"
   fi
 
-  print_info "Configuring PostgreSQL database..."
+  print_info "Verifying configuration..."
 
-  # Fix ownership so we can edit the file
-  sudo chown -R $(whoami):$(whoami) data/ 2>/dev/null || true
-
-  # Backup original SQLite config
-  cp data/homeserver.yaml data/homeserver.yaml.sqlite.bak 2>/dev/null || true
-
-  # Replace SQLite database section with PostgreSQL and add critical settings
-  python3 << 'PYTHON_SCRIPT' || {
-import yaml
-import sys
-
-try:
-    # Read existing config
-    with open('data/homeserver.yaml', 'r') as f:
-        config = yaml.safe_load(f)
-
-    # Update database configuration
-    config['database'] = {
-        'name': 'psycopg2',
-        'args': {
-            'user': 'synapse_user',
-            'password': 'synapse_password',
-            'database': 'synapse',
-            'host': 'postgres',
-            'port': 5432,
-            'cp_min': 5,
-            'cp_max': 10
-        }
-    }
-
-    # Enable registration
-    config['enable_registration'] = True
-    config['enable_registration_without_verification'] = True
-
-    # Add public_baseurl (critical for proper operation)
-    config['public_baseurl'] = 'http://localhost:8008/'
-
-    # Fix listeners to include bind_addresses (critical for Docker networking)
-    if 'listeners' in config and isinstance(config['listeners'], list):
-        for listener in config['listeners']:
-            if listener.get('port') == 8008:
-                listener['bind_addresses'] = ['::1', '127.0.0.1', '0.0.0.0']
-
-    # Remove app_service_config_files if present (will be added later if Telegram enabled)
-    if 'app_service_config_files' in config:
-        del config['app_service_config_files']
-
-    # Write updated config
-    with open('data/homeserver.yaml', 'w') as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-
-    sys.exit(0)
-except Exception as e:
-    print(f"Error: {e}", file=sys.stderr)
-    sys.exit(1)
-PYTHON_SCRIPT
-    error_exit "Failed to update Synapse configuration with PostgreSQL settings"
-  }
+  # The template already has PostgreSQL configured, just verify it
+  if ! grep -q "name: psycopg2" data/homeserver.yaml; then
+    error_exit "Configuration template is invalid - PostgreSQL not configured"
+  fi
 
   # Create media_store directory if it doesn't exist
   if [ ! -d "data/media_store" ]; then
