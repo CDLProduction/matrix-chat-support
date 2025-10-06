@@ -1,0 +1,17 @@
+id: telegram
+as_token: syt_dGVsZWdyYW1ib3Q_eqbXYOiTJxbiAilicvkl_42TvAr
+hs_token: syt_dGVsZWdyYW1ib3Q_eqbXYOiTJxbiAilicvkl_42TvAr
+namespaces:
+    users:
+    - exclusive: true
+      regex: '@telegram_.*:localhost'
+    - exclusive: true
+      regex: '@telegrambot:localhost'
+    aliases:
+    - exclusive: true
+      regex: \#telegram_.*:localhost
+url: http://mautrix-telegram:29317
+sender_localpart: v3oGMNdVYRBAr7aikKci6mb7Ep4gpFEsonFdSQRcS6JiOG9pFQX5Nl8zHSwKCgFx
+rate_limited: false
+de.sorunome.msc2409.push_ephemeral: true
+receive_ephemeral: true
