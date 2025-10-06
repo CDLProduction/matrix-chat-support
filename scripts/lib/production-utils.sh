@@ -35,23 +35,23 @@ print_section() {
 }
 
 print_step() {
-    echo -e "${BLUE}[STEP]${NC} $1"
+    echo -e "${BLUE}[STEP]${NC} $1" >&2
 }
 
 print_success() {
-    echo -e "${GREEN}[✓]${NC} $1"
+    echo -e "${GREEN}[✓]${NC} $1" >&2
 }
 
 print_warning() {
-    echo -e "${YELLOW}[⚠]${NC} $1"
+    echo -e "${YELLOW}[⚠]${NC} $1" >&2
 }
 
 print_error() {
-    echo -e "${RED}[✗]${NC} $1"
+    echo -e "${RED}[✗]${NC} $1" >&2
 }
 
 print_info() {
-    echo -e "${CYAN}[ℹ]${NC} $1"
+    echo -e "${CYAN}[ℹ]${NC} $1" >&2
 }
 
 error_exit() {
@@ -123,7 +123,7 @@ ask_password() {
 
     while true; do
         read -s -p "$(echo -e "${CYAN}$prompt:${NC} ")" password
-        echo ""
+        echo "" >&2
 
         if [ -z "$password" ]; then
             print_error "Password cannot be empty"
@@ -136,7 +136,7 @@ ask_password() {
         fi
 
         read -s -p "$(echo -e "${CYAN}Confirm password:${NC} ")" password_confirm
-        echo ""
+        echo "" >&2
 
         if [ "$password" = "$password_confirm" ]; then
             echo "$password"
@@ -257,19 +257,21 @@ check_nodejs_version() {
 
     if ! command -v node &> /dev/null; then
         print_error "Node.js is not installed"
-        echo "  Install Node.js 18+ from: https://nodejs.org/"
+        echo "  Install Node.js 20+ from: https://nodejs.org/"
+        echo "  Or use: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install nodejs -y"
         return 1
     fi
 
     local node_version=$(node --version | sed 's/v//')
     local major_version=$(echo "$node_version" | cut -d. -f1)
 
-    if [ "$major_version" -ge 18 ]; then
-        print_success "Node.js version: v$node_version (✓ >= 18)"
+    if [ "$major_version" -ge 20 ]; then
+        print_success "Node.js version: v$node_version (✓ >= 20)"
         return 0
     else
-        print_error "Node.js version: v$node_version (✗ < 18)"
-        echo "  Please upgrade to Node.js 18 or higher"
+        print_error "Node.js version: v$node_version (✗ < 20)"
+        echo "  Vite requires Node.js 20.19+ or 22.12+"
+        echo "  Upgrade with: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install nodejs -y"
         return 1
     fi
 }
@@ -413,26 +415,45 @@ matrix_login() {
     local homeserver="$1"
     local username="$2"
     local password="$3"
+    local max_retries=3
+    local retry=0
 
-    local response=$(curl -s -X POST \
-        -H "Content-Type: application/json" \
-        "${homeserver}/_matrix/client/r0/login" \
-        -d "{
-            \"type\": \"m.login.password\",
-            \"user\": \"$username\",
-            \"password\": \"$password\"
-        }")
+    while [ $retry -lt $max_retries ]; do
+        local response=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            "${homeserver}/_matrix/client/r0/login" \
+            -d "{
+                \"type\": \"m.login.password\",
+                \"user\": \"$username\",
+                \"password\": \"$password\"
+            }")
 
-    local access_token=$(echo "$response" | jq -r '.access_token // empty')
+        local access_token=$(echo "$response" | jq -r '.access_token // empty')
 
-    if [ -z "$access_token" ] || [ "$access_token" = "null" ]; then
+        if [ -n "$access_token" ] && [ "$access_token" != "null" ]; then
+            echo "$access_token"
+            return 0
+        fi
+
         local error=$(echo "$response" | jq -r '.error // .errcode // "Unknown error"')
+        local errcode=$(echo "$response" | jq -r '.errcode // empty')
+
+        # Check if it's a rate limit error
+        if [[ "$error" == *"Too Many Requests"* ]] || [ "$errcode" = "M_LIMIT_EXCEEDED" ]; then
+            retry=$((retry + 1))
+            if [ $retry -lt $max_retries ]; then
+                local wait_time=$((retry * 3))
+                print_warning "Rate limited, retrying in ${wait_time}s (attempt $retry/$max_retries)..."
+                sleep $wait_time
+                continue
+            fi
+        fi
+
         print_error "Failed to login as $username: $error"
         return 1
-    fi
+    done
 
-    echo "$access_token"
-    return 0
+    return 1
 }
 
 matrix_create_user() {
@@ -443,20 +464,30 @@ matrix_create_user() {
 
     print_info "Creating Matrix user: $username..."
 
-    local admin_flag=""
+    local admin_flag="--no-admin"
     if [ "$is_admin" = "true" ]; then
         admin_flag="--admin"
     fi
 
+    # Create user (redirect output to stderr to not contaminate token capture)
     docker exec matrix-synapse register_new_matrix_user \
         -c /data/homeserver.yaml \
         -u "$username" \
         -p "$password" \
         $admin_flag \
-        "$homeserver" 2>&1 | grep -v "Synapse Admin API" || true
+        "$homeserver" >&2 2>&1 || {
+        print_error "Failed to create user: $username" >&2
+        return 1
+    }
+
+    # Delay to avoid rate limiting
+    sleep 2
 
     # Get access token
     local token=$(matrix_login "$homeserver" "$username" "$password")
+
+    # Additional delay after login to avoid rate limiting
+    sleep 2
 
     if [ -n "$token" ]; then
         print_success "User created: $username"

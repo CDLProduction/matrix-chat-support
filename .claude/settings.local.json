@@ -36,7 +36,20 @@
       "Bash(mkdir:*)",
       "Bash(docker compose:*)",
       "Bash(pkill:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(sudo rm:*)",
+      "Read(//opt/matrix-chat-support/**)",
+      "Bash(docker ps:*)",
+      "Bash(netstat:*)",
+      "Bash(ss:*)",
+      "Bash(sudo cp:*)",
+      "Bash(sudo chown:*)",
+      "Read(//tmp/**)",
+      "Bash(sudo:*)",
+      "Bash(tee:*)",
+      "Bash(/tmp/test-session-creation.sh:*)",
+      "Bash(systemctl status:*)",
+      "Bash(journalctl:*)"
     ],
     "deny": [],
     "ask": []

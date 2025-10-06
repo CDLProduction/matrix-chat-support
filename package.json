@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "scripts": {
     "build:widget": "vite build",
     "serve": "node server/index.js",

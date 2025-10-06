@@ -19,6 +19,7 @@ services:
     image: matrixdotorg/synapse:v1.113.0
     container_name: matrix-synapse
     restart: unless-stopped
+    user: "${SYNAPSE_UID:-1000}:${SYNAPSE_GID:-1000}"
     environment:
       SYNAPSE_SERVER_NAME: localhost
       SYNAPSE_REPORT_STATS: "no"

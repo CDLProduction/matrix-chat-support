@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Chat Widget - Test Page</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .info-box h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .info-box p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .info-box code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #d63384;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .feature-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .feature-card .icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .feature-card h3 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+
+        .feature-card p {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .status {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-weight: 500;
+        }
+
+        .button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin: 10px 5px;
+        }
+
+        .button:hover {
+            background: #5568d3;
+        }
+
+        .button.secondary {
+            background: #6c757d;
+        }
+
+        .button.secondary:hover {
+            background: #5a6268;
+        }
+
+        footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #dee2e6;
+            text-align: center;
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+
+        .debug-info {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-size: 0.9em;
+            display: none;
+        }
+
+        .debug-info.show {
+            display: block;
+        }
+
+        .debug-info h3 {
+            margin-bottom: 10px;
+            color: #856404;
+        }
+
+        .debug-info pre {
+            background: #fff;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Matrix Chat Support Widget</h1>
+        <p class="subtitle">Live Testing Environment</p>
+
+        <div class="status" id="status">
+            ✅ Widget embed script loaded successfully!
+        </div>
+
+        <div class="info-box">
+            <h2>📝 How to Test</h2>
+            <p>1. Look for the chat button in the <strong>bottom-right corner</strong> of the page</p>
+            <p>2. Click the button to open the department selection</p>
+            <p>3. Choose a department and start a conversation</p>
+            <p>4. Check the Matrix Element interface at <code>http://localhost:8081</code> to see the support side</p>
+        </div>
+
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="icon">🎧</div>
+                <h3>General Support</h3>
+                <p>Technical help and inquiries</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">💼</div>
+                <h3>Commerce</h3>
+                <p>Sales and billing questions</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🔒</div>
+                <h3>Verification</h3>
+                <p>Account verification</p>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <h2>🔗 Useful Links</h2>
+            <p><strong>Widget Server:</strong> <a href="http://localhost:3001/health" target="_blank">http://localhost:3001/health</a></p>
+            <p><strong>Element (Support View):</strong> <a href="http://localhost:8081" target="_blank">http://localhost:8081</a></p>
+            <p><strong>Synapse Admin:</strong> <a href="http://localhost:8080" target="_blank">http://localhost:8080</a></p>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px;">
+            <button class="button" onclick="testWidget()">🧪 Test Widget</button>
+            <button class="button secondary" onclick="toggleDebug()">🔍 Toggle Debug Info</button>
+        </div>
+
+        <div class="debug-info" id="debugInfo">
+            <h3>Debug Information</h3>
+            <pre id="debugContent">Loading...</pre>
+        </div>
+
+        <footer>
+            <p>Matrix Chat Support Widget | Powered by Matrix Protocol</p>
+            <p style="margin-top: 10px;">
+                <strong>Support Credentials:</strong> Check <code>/opt/matrix-chat-support/data/user-credentials.txt</code>
+            </p>
+        </footer>
+    </div>
+
+    <!-- Load the widget embed script -->
+    <script src="http://localhost:3001/embed.js"></script>
+
+    <script>
+        // Test widget initialization
+        function testWidget() {
+            if (typeof window.MatrixChatWidget !== 'undefined') {
+                alert('✅ Widget is loaded and ready!\n\nClick the chat button in the bottom-right corner to test.');
+            } else {
+                alert('❌ Widget not loaded.\n\nCheck the browser console for errors.');
+            }
+        }
+
+        // Toggle debug information
+        function toggleDebug() {
+            const debugInfo = document.getElementById('debugInfo');
+            const debugContent = document.getElementById('debugContent');
+
+            debugInfo.classList.toggle('show');
+
+            if (debugInfo.classList.contains('show')) {
+                // Gather debug info
+                const info = {
+                    widgetLoaded: typeof window.MatrixChatWidget !== 'undefined',
+                    timestamp: new Date().toISOString(),
+                    userAgent: navigator.userAgent,
+                    screenSize: `${window.innerWidth}x${window.innerHeight}`,
+                    localStorage: {
+                        hasSession: localStorage.getItem('matrix-chat-session') !== null,
+                        hasUserId: localStorage.getItem('matrix-chat-user-id') !== null
+                    }
+                };
+
+                debugContent.textContent = JSON.stringify(info, null, 2);
+            }
+        }
+
+        // Check if widget loaded successfully
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                const statusEl = document.getElementById('status');
+
+                if (typeof window.MatrixChatWidget !== 'undefined') {
+                    statusEl.innerHTML = '✅ Widget loaded successfully! Look for the chat button in the bottom-right corner.';
+                    statusEl.style.background = '#d4edda';
+                    statusEl.style.borderColor = '#c3e6cb';
+                    statusEl.style.color = '#155724';
+                } else {
+                    statusEl.innerHTML = '❌ Widget failed to load. Check browser console for errors.';
+                    statusEl.style.background = '#f8d7da';
+                    statusEl.style.borderColor = '#f5c6cb';
+                    statusEl.style.color = '#721c24';
+                }
+            }, 1000);
+        });
+
+        // Log to console
+        console.log('%c🚀 Matrix Chat Widget Test Page', 'font-size: 20px; color: #667eea; font-weight: bold;');
+        console.log('Widget Server: http://localhost:3001');
+        console.log('Element Client: http://localhost:8081');
+        console.log('---');
+        console.log('Waiting for widget to load...');
+
+        setTimeout(function() {
+            if (typeof window.MatrixChatWidget !== 'undefined') {
+                console.log('%c✅ Widget loaded successfully!', 'color: green; font-weight: bold;');
+            } else {
+                console.error('❌ Widget failed to load');
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

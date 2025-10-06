@@ -152,20 +152,20 @@ app.use((req, res, next) => {
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
-    
+    // Allow requests with no origin (mobile apps, curl, file://, etc.)
+    if (!origin || origin === 'null') return callback(null, true);
+
     // Allow any localhost port during development
     if (origin.match(/^https?:\/\/localhost(:\d+)?$/)) {
       return callback(null, true);
     }
-    
+
     // Allow configured origins
     const allowedOrigins = config.server?.cors_origins || [];
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    
+
     // Reject other origins
     callback(new Error('Not allowed by CORS'));
   },

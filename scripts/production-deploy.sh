@@ -127,10 +127,13 @@ phase_application_installation() {
     sudo cp -r "$PROJECT_DIR/config" "$INSTALL_DIR/"
     sudo cp -r "$PROJECT_DIR/server" "$INSTALL_DIR/"
     sudo cp -r "$PROJECT_DIR/scripts" "$INSTALL_DIR/"
+    sudo cp -r "$PROJECT_DIR/src" "$INSTALL_DIR/" 2>/dev/null || true
     sudo cp -r "$PROJECT_DIR/docker" "$INSTALL_DIR/" 2>/dev/null || true
     sudo cp "$PROJECT_DIR/docker-compose.yml" "$INSTALL_DIR/"
     sudo cp "$PROJECT_DIR/package.json" "$INSTALL_DIR/"
     sudo cp "$PROJECT_DIR/package-lock.json" "$INSTALL_DIR/" 2>/dev/null || true
+    sudo cp "$PROJECT_DIR/vite.config.js" "$INSTALL_DIR/" 2>/dev/null || true
+    sudo cp "$PROJECT_DIR/vite.config.ts" "$INSTALL_DIR/" 2>/dev/null || true
 
     # Copy built widget if exists
     if [ -d "$PROJECT_DIR/dist" ]; then
@@ -146,18 +149,56 @@ phase_application_installation() {
     # Install Node.js dependencies
     print_step "Installing Node.js dependencies..."
     cd "$INSTALL_DIR"
-    sudo -u $SYSTEM_USER npm ci --production --quiet || {
-        error_exit "Failed to install Node.js dependencies"
-    }
+
+    # Check if widget needs to be built
+    local need_build=false
+    if [ ! -d "$INSTALL_DIR/dist/widget" ] || [ -z "$(ls -A $INSTALL_DIR/dist/widget 2>/dev/null)" ]; then
+        need_build=true
+    fi
+
+    # Use npm ci if package-lock.json exists, otherwise use npm install
+    # Include devDependencies if we need to build (vite is in devDependencies)
+    if [ -f "$INSTALL_DIR/package-lock.json" ]; then
+        print_info "Using npm ci (package-lock.json found)..."
+        if [ "$need_build" = true ]; then
+            sudo -u $SYSTEM_USER npm ci --quiet || {
+                error_exit "Failed to install Node.js dependencies"
+            }
+        else
+            sudo -u $SYSTEM_USER npm ci --omit=dev --quiet || {
+                error_exit "Failed to install Node.js dependencies"
+            }
+        fi
+    else
+        print_info "Using npm install (no package-lock.json)..."
+        if [ "$need_build" = true ]; then
+            sudo -u $SYSTEM_USER npm install --quiet || {
+                error_exit "Failed to install Node.js dependencies"
+            }
+        else
+            sudo -u $SYSTEM_USER npm install --omit=dev --quiet || {
+                error_exit "Failed to install Node.js dependencies"
+            }
+        fi
+    fi
     print_success "Node.js dependencies installed"
 
-    # Build widget if not already built
-    if [ ! -d "$INSTALL_DIR/dist" ]; then
+    # Build widget if needed
+    if [ "$need_build" = true ]; then
         print_step "Building widget..."
+        cd "$INSTALL_DIR"
         sudo -u $SYSTEM_USER npm run build:widget || {
             error_exit "Failed to build widget"
         }
         print_success "Widget built successfully"
+
+        # Clean up dev dependencies after build to save space
+        print_info "Removing dev dependencies to save space..."
+        sudo -u $SYSTEM_USER npm prune --omit=dev --quiet || true
+
+        cd - > /dev/null
+    else
+        print_info "Widget already built, skipping build step"
     fi
 
     print_success "Application installation complete!"
@@ -218,18 +259,24 @@ phase_configuration_setup() {
         cors_origins=$(ask_question "Enter CORS origins (comma-separated)" "https://$domain,https://www.$domain")
     fi
 
-    # Save configuration to session
-    cat > "$SESSION_FILE" << EOF
-{
-  "domain": "$domain",
-  "admin_email": "$admin_email",
-  "admin_password": "$admin_password",
-  "telegram_token": "$telegram_token",
-  "cors_origins": "$cors_origins",
-  "install_dir": "$INSTALL_DIR",
-  "system_user": "$SYSTEM_USER"
-}
-EOF
+    # Save configuration to session (using jq to properly escape JSON)
+    jq -n \
+        --arg domain "$domain" \
+        --arg admin_email "$admin_email" \
+        --arg admin_password "$admin_password" \
+        --arg telegram_token "$telegram_token" \
+        --arg cors_origins "$cors_origins" \
+        --arg install_dir "$INSTALL_DIR" \
+        --arg system_user "$SYSTEM_USER" \
+        '{
+            domain: $domain,
+            admin_email: $admin_email,
+            admin_password: $admin_password,
+            telegram_token: $telegram_token,
+            cors_origins: $cors_origins,
+            install_dir: $install_dir,
+            system_user: $system_user
+        }' > "$SESSION_FILE"
 
     print_success "Configuration saved"
     update_progress
@@ -270,10 +317,17 @@ phase_docker_services() {
     # Create media_store directory
     sudo mkdir -p "$INSTALL_DIR/data/media_store"
 
-    # Set ownership for Synapse (UID 991)
-    sudo chown -R 991:991 "$INSTALL_DIR/data/" 2>/dev/null || {
+    # Set ownership for Synapse to match current user (1000:1000 for cdl user)
+    sudo chown -R 1000:1000 "$INSTALL_DIR/data/" 2>/dev/null || {
         sudo chmod -R 777 "$INSTALL_DIR/data/"
     }
+
+    # Create .env file for Docker Compose with proper UID/GID
+    cat > "$INSTALL_DIR/.env" << 'EOF'
+# Synapse User/Group ID Configuration
+SYNAPSE_UID=1000
+SYNAPSE_GID=1000
+EOF
 
     print_success "Synapse configured for domain: $domain"
 
@@ -285,7 +339,17 @@ phase_docker_services() {
 
     sleep 5
 
+    # Start Synapse (it will auto-generate signing key on first run)
+    print_step "Starting Synapse and generating signing key..."
     sudo $compose_cmd up -d synapse || error_exit "Failed to start Synapse"
+
+    # Wait for signing key to be generated
+    sleep 3
+    if [ ! -f "$INSTALL_DIR/data/localhost.signing.key" ]; then
+        print_info "Waiting for Synapse to generate signing key..."
+        sleep 5
+    fi
+
     print_success "Synapse started"
 
     sudo $compose_cmd up -d synapse-admin element 2>/dev/null || true
@@ -349,29 +413,52 @@ phase_user_creation() {
 
     print_success "All users created (1 admin + 9 department users)"
 
-    # Update config.yaml with tokens
+    # Update config.yaml with tokens using Python/YAML for safety
     print_step "Updating config.yaml with access tokens..."
 
     local config_file="$INSTALL_DIR/config/config.yaml"
+    local telegram_token=$(jq -r '.telegram_token' "$SESSION_FILE")
 
-    # Update homeserver URLs with domain
-    sudo sed -i "s|homeserver: \"http://localhost:8008\"|homeserver: \"http://$domain:8008\"|g" "$config_file"
+    # Use Python to safely update YAML with tokens
+    python3 << PYEOF
+import yaml
+import sys
 
-    # Update admin token
-    sudo sed -i "s|admin_access_token:.*|admin_access_token: \"$admin_token\"|" "$config_file"
+config_file = "$config_file"
+
+try:
+    with open(config_file, 'r') as f:
+        config = yaml.safe_load(f)
+
+    # Update top-level matrix config (used by Telegram router)
+    if 'matrix' in config:
+        config['matrix']['access_token'] = '$admin_token'
+        config['matrix']['admin_access_token'] = '$admin_token'
 
     # Update department tokens
-    sudo sed -i "/id: \"support\"/,/id: \"commerce\"/ s|access_token:.*|access_token: \"${user_tokens[support_agent1]}\"|" "$config_file"
-    sudo sed -i "/id: \"commerce\"/,/id: \"identification\"/ s|access_token:.*|access_token: \"${user_tokens[commerce_agent1]}\"|" "$config_file"
-    sudo sed -i "/id: \"identification\"/,/^[^ ]/ s|access_token:.*|access_token: \"${user_tokens[identify_agent1]}\"|" "$config_file"
+    for dept in config.get('departments', []):
+        if dept['id'] == 'support' and '${user_tokens[support_agent1]}':
+            dept['matrix']['access_token'] = '${user_tokens[support_agent1]}'
+            dept['matrix']['admin_access_token'] = '$admin_token'
+        elif dept['id'] == 'commerce' and '${user_tokens[commerce_agent1]}':
+            dept['matrix']['access_token'] = '${user_tokens[commerce_agent1]}'
+            dept['matrix']['admin_access_token'] = '$admin_token'
+        elif dept['id'] == 'identification' and '${user_tokens[identify_agent1]}':
+            dept['matrix']['access_token'] = '${user_tokens[identify_agent1]}'
+            dept['matrix']['admin_access_token'] = '$admin_token'
 
     # Update Telegram token
-    local telegram_token=$(jq -r '.telegram_token' "$SESSION_FILE")
-    sudo sed -i "s|bot_token:.*|bot_token: \"$telegram_token\"|" "$config_file"
+    for social in config.get('social_media', []):
+        if social.get('platform') == 'telegram':
+            social['config']['bot_token'] = '$telegram_token'
 
-    # Update CORS origins
-    local cors_origins=$(jq -r '.cors_origins' "$SESSION_FILE")
-    # This requires more complex YAML editing, skipping for now
+    with open(config_file, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+    print("Tokens updated successfully", file=sys.stderr)
+except Exception as e:
+    print(f"Warning: Could not update config.yaml: {e}", file=sys.stderr)
+PYEOF
 
     print_success "Configuration updated with tokens"
 
@@ -487,6 +574,21 @@ phase_systemd_installation() {
     sudo systemctl enable matrix-chat-docker.service
     sudo systemctl enable matrix-chat-widget.service
     sudo systemctl enable matrix-chat-telegram.service 2>/dev/null || true
+
+    # Fix data directory permissions for widget server access
+    # Synapse container runs as UID 1000, widget service runs as matrix-chat user
+    # Set data directory to be group-accessible so both can use it
+    print_step "Setting data directory permissions..."
+
+    # Add matrix-chat user to group 1000 (typically 'cdl' group)
+    sudo usermod -a -G $(id -g 1000) matrix-chat 2>/dev/null || true
+
+    # Set group ownership and permissions
+    sudo chgrp -R $(id -g 1000) "$INSTALL_DIR/data"
+    sudo chmod -R 775 "$INSTALL_DIR/data"
+
+    # Ensure future files inherit group ownership
+    sudo chmod g+s "$INSTALL_DIR/data"
 
     # Start services
     print_step "Starting services..."
@@ -727,10 +829,15 @@ phase_verification() {
 
     # Test embed script
     print_step "Testing embed script..."
-    if curl -s "http://localhost:3001/embed.js" | grep -q "MatrixChatWidget"; then
+    local embed_response=$(curl -s "http://localhost:3001/embed.js")
+    if echo "$embed_response" | grep -q "MatrixChatWidget"; then
         print_success "Embed script is accessible"
     else
-        print_error "Embed script test failed"
+        if echo "$embed_response" | grep -q "Widget not built"; then
+            print_error "Widget not built. Run 'npm run build:widget' in $INSTALL_DIR"
+        else
+            print_error "Embed script test failed"
+        fi
         ((failed++))
     fi
 

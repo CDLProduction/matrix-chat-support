@@ -7,11 +7,20 @@
  * It listens for Telegram bot commands and creates appropriate Matrix rooms in department spaces.
  */
 
-const TelegramBot = require('node-telegram-bot-api');
-const axios = require('axios');
-const yaml = require('js-yaml');
-const fs = require('fs');
-const path = require('path');
+import TelegramBot from 'node-telegram-bot-api';
+import axios from 'axios';
+import yaml from 'js-yaml';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import { createRequire } from 'module';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const require = createRequire(import.meta.url);
+
+// Import CommonJS modules using require
 const EventSource = require('eventsource');
 
 // Store mapping between Telegram chats and Matrix rooms
