@@ -38,10 +38,10 @@ registration.yaml
 # MATRIX & SYNAPSE DATA
 # =============================================================================
 # Synapse data directory (contains sensitive data, but keep mappings)
-/data/
-!/data/.gitkeep
+#/data/
+#!/data/.gitkeep
 # Keep chat room mappings for functionality
-!/data/chat-room-mappings.json
+#!/data/chat-room-mappings.json
 
 # Matrix database files
 *.db

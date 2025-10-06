@@ -1,0 +1,31 @@
+{
+  "chatRoomMapping": {
+    "429533702": {
+      "roomId": "!FpfssegzNfHoZhFGfu:localhost",
+      "departmentId": "support",
+      "userId": 429533702,
+      "username": "ikisseli"
+    },
+    "467102462": {
+      "roomId": "!fCunPgcBYiVQVsKzJQ:localhost",
+      "departmentId": "support",
+      "userId": 467102462,
+      "username": "CristianSW_JV"
+    }
+  },
+  "roomChatMapping": {
+    "!BCvuPryeMMNJvFjomu:localhost": 467102462,
+    "!FpfssegzNfHoZhFGfu:localhost": 429533702,
+    "!GiRHsWJWvCXOElzWbb:localhost": 467102462,
+    "!fCunPgcBYiVQVsKzJQ:localhost": 467102462
+  },
+  "telegramSpaces": {
+    "mainSpaceId": "!VsDdYUafomLuyKMZmr:localhost",
+    "departmentSpaces": {
+      "support": "!hSCHvWEaTlVUXndYJS:localhost",
+      "commerce": "!ZsQbIzTXxaHkcTrIuo:localhost",
+      "identification": "!lPltKgOOsBksmPgOkJ:localhost"
+    }
+  },
+  "lastUpdated": "2025-10-03T11:05:55.095Z"
+}
