@@ -13,13 +13,13 @@ Group=root
 WorkingDirectory=/opt/matrix-chat-support
 
 # Start Docker Compose services
-ExecStart=/usr/bin/docker compose up -d postgres synapse synapse-admin element
+ExecStart=/usr/bin/docker-compose up -d postgres synapse synapse-admin element
 
 # Stop Docker Compose services
-ExecStop=/usr/bin/docker compose down
+ExecStop=/usr/bin/docker-compose down
 
 # Reload Docker Compose services
-ExecReload=/usr/bin/docker compose restart
+ExecReload=/usr/bin/docker-compose restart
 
 # Resource limits
 TimeoutStartSec=300

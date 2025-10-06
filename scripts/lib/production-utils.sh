@@ -159,6 +159,19 @@ generate_secure_password() {
 validate_domain() {
     local domain="$1"
 
+    # Check if it's a valid IP address (IPv4)
+    if [[ "$domain" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        # Validate each octet is 0-255
+        local IFS='.'
+        read -ra OCTETS <<< "$domain"
+        for octet in "${OCTETS[@]}"; do
+            if [ "$octet" -gt 255 ]; then
+                return 1
+            fi
+        done
+        return 0
+    fi
+
     # Check basic domain format
     if [[ ! "$domain" =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
         return 1
