@@ -11,6 +11,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const yaml = require('js-yaml');
 const fs = require('fs');
+const path = require('path');
 const EventSource = require('eventsource');
 
 // Store mapping between Telegram chats and Matrix rooms
@@ -99,7 +100,7 @@ function saveMappings() {
 }
 
 // Load configuration
-const config = yaml.load(fs.readFileSync('../config/config.yaml', 'utf8'));
+const config = yaml.load(fs.readFileSync(path.join(__dirname, '../config/config.yaml'), 'utf8'));
 
 // Build Telegram department spaces from config.yaml departments
 const TELEGRAM_DEPARTMENT_SPACES = {};
