@@ -358,20 +358,28 @@ async function createDepartmentRoom(departmentId, telegramUser, telegramChatId) 
   const roomTopic = `Support chat with Telegram user @${telegramUser.username || telegramUser.first_name} (${telegramChatId})`;
 
   try {
-    // Create room in Matrix
+    // Prepare list of users to invite during room creation
+    const usersToInvite = department.departmentUsers || [department.matrixUser];
+
+    // Build power levels for all department users
+    const powerLevelUsers = {
+      '@admin:localhost': 100
+    };
+    usersToInvite.forEach(userId => {
+      powerLevelUsers[userId] = 50;
+    });
+
+    // Create room in Matrix - invite ALL department users from the start
     const roomResponse = await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/createRoom`, {
       name: roomName,
       topic: roomTopic,
       visibility: 'private',
       preset: 'private_chat',
-      invite: [department.matrixUser],
+      invite: usersToInvite,  // Invite ALL department users at room creation
       initial_state: [{
         type: 'm.room.power_levels',
         content: {
-          users: {
-            '@admin:localhost': 100,
-            [department.matrixUser]: 50
-          }
+          users: powerLevelUsers
         }
       }]
     }, {
@@ -407,21 +415,70 @@ async function createDepartmentRoom(departmentId, telegramUser, telegramChatId) 
       }
     });
 
-    // Ensure department user is invited to the space so they can see hierarchy
-    try {
-      await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${department.spaceId}/invite`, {
-        user_id: department.matrixUser
-      }, {
-        headers: {
-          'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json'
+    // Users already invited during room creation, now ensure they're in the department space
+    console.log(`📧 Ensuring ${usersToInvite.length} department users are in space ${department.name}...`);
+
+    for (const userId of usersToInvite) {
+      try {
+        await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${department.spaceId}/invite`, {
+          user_id: userId
+        }, {
+          headers: {
+            'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log(`  ✅ Invited ${userId} to space ${department.name}`);
+      } catch (spaceInviteError) {
+        // User might already be in space, that's okay
+        if (!spaceInviteError.response?.data?.errcode?.includes('M_FORBIDDEN')) {
+          console.log(`  ℹ️  ${userId} already in space ${department.name}`);
         }
-      });
-      console.log(`📧 Invited ${department.matrixUser} to space ${department.name}`);
-    } catch (spaceInviteError) {
-      // User might already be in space, that's okay
-      if (!spaceInviteError.response?.data?.errcode?.includes('M_FORBIDDEN')) {
-        console.log(`ℹ️  ${department.matrixUser} may already be in space ${department.name}`);
+      }
+    }
+
+    // Invite observer user if configured (read-only access)
+    if (config.observer && config.observer.enabled && config.observer.auto_invite) {
+      try {
+        // Invite observer to the room
+        await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${roomId}/invite`, {
+          user_id: config.observer.user_id
+        }, {
+          headers: {
+            'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        // Set read-only permissions for observer
+        // Get current power levels
+        const powerLevelsResponse = await axios.get(
+          `${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${roomId}/state/m.room.power_levels/`,
+          {
+            headers: { 'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}` }
+          }
+        );
+
+        const powerLevels = powerLevelsResponse.data;
+        powerLevels.users = powerLevels.users || {};
+        powerLevels.users[config.observer.user_id] = 0;  // Observer has level 0
+        powerLevels.events_default = 50;  // Requires level 50 to send messages
+
+        // Update power levels
+        await axios.put(
+          `${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${roomId}/state/m.room.power_levels/`,
+          powerLevels,
+          {
+            headers: {
+              'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        console.log(`👁️  Observer invited to room ${roomId} (read-only)`);
+      } catch (observerError) {
+        console.error('⚠️  Failed to invite observer:', observerError.response?.data || observerError.message);
       }
     }
 
@@ -517,6 +574,67 @@ async function handleDepartmentSelection(departmentId, telegramUser, chatId) {
       const roomAccessible = await verifyRoomAccess(existingMapping.roomId);
 
       if (roomAccessible) {
+        // Ensure all department users are invited (fix for rooms created before multi-user fix)
+        const usersToInvite = department.departmentUsers || [department.matrixUser];
+        console.log(`🔧 Ensuring ${usersToInvite.length} department users are in room ${existingMapping.roomId}...`);
+
+        for (const userId of usersToInvite) {
+          try {
+            await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${existingMapping.roomId}/invite`, {
+              user_id: userId
+            }, {
+              headers: {
+                'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            console.log(`  ✅ Invited ${userId} to room`);
+          } catch (inviteError) {
+            // User might already be in room, that's okay
+            if (inviteError.response?.data?.errcode === 'M_FORBIDDEN' || inviteError.response?.data?.error?.includes('already in the room')) {
+              console.log(`  ℹ️  ${userId} already in room`);
+            } else {
+              console.warn(`  ⚠️  Failed to invite ${userId}:`, inviteError.response?.data?.error || inviteError.message);
+            }
+          }
+
+          // Also ensure user is in department space
+          try {
+            await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${department.spaceId}/invite`, {
+              user_id: userId
+            }, {
+              headers: {
+                'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            console.log(`  ✅ Invited ${userId} to space`);
+          } catch (spaceError) {
+            if (spaceError.response?.data?.errcode === 'M_FORBIDDEN' || spaceError.response?.data?.error?.includes('already in the room')) {
+              console.log(`  ℹ️  ${userId} already in space`);
+            }
+          }
+        }
+
+        // Also invite observer if configured
+        if (config.observer && config.observer.enabled && config.observer.auto_invite) {
+          try {
+            await axios.post(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${existingMapping.roomId}/invite`, {
+              user_id: config.observer.user_id
+            }, {
+              headers: {
+                'Authorization': `Bearer ${ADMIN_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            console.log(`  👁️  Invited observer to room`);
+          } catch (observerError) {
+            if (!observerError.response?.data?.error?.includes('already in the room')) {
+              console.warn(`  ⚠️  Failed to invite observer:`, observerError.response?.data?.error);
+            }
+          }
+        }
+
         // Simply reconnect without showing history (both sides already have it)
         await bot.sendMessage(chatId, `
 ✅ **Reconnected to ${department.name}**

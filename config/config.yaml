@@ -143,6 +143,17 @@ server:
     - "file://"
   static_path: "./dist/widget"
 
+# Observer user (read-only access to all departments)
+observer:
+  enabled: true
+  user_id: "@observer:localhost"
+  password: "observer123"  # Change this after creation
+  access_token: "syt_b2JzZXJ2ZXI_zkpZTxvMHkqQLaPZqzan_0AOoN0"
+  display_name: "Support Observer"
+  auto_invite: true
+  permissions: "read_only"
+  description: "Manager with read-only access to all conversations"
+
 # Logging
 logging:
   level: "info"

@@ -834,20 +834,20 @@ export class MatrixChatClient {
         this.currentRoomId = response.room_id
 
         // Phase 2: Matrix Spaces Integration - Organize room in space hierarchy
-        await this.organizeRoomInSpaces(this.currentRoomId, departmentInfo, supportBotClient)
+        const spaceContext = await this.organizeRoomInSpaces(this.currentRoomId, departmentInfo, supportBotClient)
 
         // Store room ID for future sessions
         setRoomId(this.currentRoomId)
 
         // Invite the guest user to the room
         await supportBotClient.invite(this.currentRoomId, currentUserId)
-        
+
         // Now the guest user (our current client) needs to join the room
         await this.client.joinRoom(this.currentRoomId)
-        
+
         // Wait a moment for the join to fully complete
         await new Promise(resolve => setTimeout(resolve, 1000))
-        
+
         // Invite configured support users/bots
         const supportBotUserId = await this.getSupportBotUserId()
 
@@ -857,8 +857,19 @@ export class MatrixChatClient {
             // Skip inviting the support bot and current guest user
             if (userId !== supportBotUserId && userId !== currentUserId) {
               try {
+                // Invite to the room
                 await supportBotClient.invite(this.currentRoomId, userId)
-                console.log(`Invited department user: ${userId}`)
+                console.log(`Invited department user to room: ${userId}`)
+
+                // Also invite to the department space so they can see it organized properly
+                if (spaceContext?.departmentSpaceId) {
+                  try {
+                    await supportBotClient.invite(spaceContext.departmentSpaceId, userId)
+                    console.log(`Invited department user to space: ${userId}`)
+                  } catch (spaceError) {
+                    console.warn(`Failed to invite ${userId} to department space:`, spaceError)
+                  }
+                }
               } catch (error) {
                 console.warn(`Failed to invite department user ${userId}:`, error)
               }
@@ -873,6 +884,30 @@ export class MatrixChatClient {
             await supportBotClient.invite(this.currentRoomId, this.config.botUserId)
           } catch (error) {
             console.warn('Failed to invite additional bot user:', error)
+          }
+        }
+
+        // Invite observer user if configured (read-only access)
+        if ((window as any).__MATRIX_CONFIG__?.observer?.enabled &&
+            (window as any).__MATRIX_CONFIG__?.observer?.auto_invite) {
+          try {
+            const observerUserId = (window as any).__MATRIX_CONFIG__.observer.user_id
+
+            // Invite observer to the room
+            await supportBotClient.invite(this.currentRoomId, observerUserId)
+            console.log('Invited observer user to room (read-only)')
+
+            // Also invite observer to the department space
+            if (spaceContext?.departmentSpaceId) {
+              try {
+                await supportBotClient.invite(spaceContext.departmentSpaceId, observerUserId)
+                console.log('Invited observer user to space (read-only)')
+              } catch (spaceError) {
+                console.warn('Failed to invite observer to department space:', spaceError)
+              }
+            }
+          } catch (error) {
+            console.warn('Failed to invite observer user:', error)
           }
         }
 

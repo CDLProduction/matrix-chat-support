@@ -482,28 +482,42 @@ matrix_create_user() {
         admin_flag="--admin"
     fi
 
-    # Create user (redirect output to stderr to not contaminate token capture)
-    docker exec matrix-synapse register_new_matrix_user \
+    # Attempt to create user (capture output to check for "already exists" error)
+    local create_output=$(docker exec matrix-synapse register_new_matrix_user \
         -c /data/homeserver.yaml \
         -u "$username" \
         -p "$password" \
         $admin_flag \
-        "$homeserver" >&2 2>&1 || {
-        print_error "Failed to create user: $username" >&2
-        return 1
-    }
+        "$homeserver" 2>&1)
+
+    local create_result=$?
+
+    # Check if user already exists
+    if [ $create_result -ne 0 ]; then
+        if echo "$create_output" | grep -iq "already exists\|user exists"; then
+            print_warning "User $username already exists, getting token..." >&2
+        else
+            print_error "Failed to create user: $username" >&2
+            echo "$create_output" >&2
+            return 1
+        fi
+    fi
 
     # Delay to avoid rate limiting
     sleep 2
 
-    # Get access token
+    # Get access token (works for both new and existing users)
     local token=$(matrix_login "$homeserver" "$username" "$password")
 
     # Additional delay after login to avoid rate limiting
     sleep 2
 
     if [ -n "$token" ]; then
-        print_success "User created: $username"
+        if [ $create_result -eq 0 ]; then
+            print_success "User created: $username"
+        else
+            print_success "Token retrieved for existing user: $username"
+        fi
         echo "$token"
         return 0
     else

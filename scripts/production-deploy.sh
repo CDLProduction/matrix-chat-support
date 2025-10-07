@@ -411,7 +411,12 @@ phase_user_creation() {
         user_tokens["identify_agent$i"]="$token"
     done
 
-    print_success "All users created (1 admin + 9 department users)"
+    # Observer User (read-only access to all departments)
+    print_info "Creating Observer User (read-only)..."
+    local observer_token=$(matrix_create_user "$homeserver" "observer" "observer123" "false")
+    user_tokens["observer"]="$observer_token"
+
+    print_success "All users created (1 admin + 9 department users + 1 observer)"
 
     # Update config.yaml with tokens using Python/YAML for safety
     print_step "Updating config.yaml with access tokens..."
@@ -419,12 +424,13 @@ phase_user_creation() {
     local config_file="$INSTALL_DIR/config/config.yaml"
     local telegram_token=$(jq -r '.telegram_token' "$SESSION_FILE")
 
-    # Use Python to safely update YAML with tokens
+    # Use Python to safely update YAML with tokens and domain
     python3 << PYEOF
 import yaml
 import sys
 
 config_file = "$config_file"
+domain = "$domain"
 
 try:
     with open(config_file, 'r') as f:
@@ -432,11 +438,33 @@ try:
 
     # Update top-level matrix config (used by Telegram router)
     if 'matrix' in config:
+        config['matrix']['homeserver'] = f'http://{domain}:8008'
         config['matrix']['access_token'] = '$admin_token'
         config['matrix']['admin_access_token'] = '$admin_token'
+        config['matrix']['bot_user_id'] = f'@admin:{domain}'
 
-    # Update department tokens
+    # Update department tokens and homeserver URLs
     for dept in config.get('departments', []):
+        # Update homeserver and domain for all departments
+        if 'matrix' in dept:
+            dept['matrix']['homeserver'] = f'http://{domain}:8008'
+
+            # Update user IDs to use production domain
+            if 'bot_user_id' in dept['matrix']:
+                # Extract username from existing bot_user_id
+                old_bot = dept['matrix']['bot_user_id']
+                username = old_bot.split(':')[0]  # @username:localhost -> @username
+                dept['matrix']['bot_user_id'] = f'{username}:{domain}'
+
+            # Update department_users array to use production domain
+            if 'department_users' in dept['matrix'] and dept['matrix']['department_users']:
+                updated_users = []
+                for user_id in dept['matrix']['department_users']:
+                    username = user_id.split(':')[0]  # @user:localhost -> @user
+                    updated_users.append(f'{username}:{domain}')
+                dept['matrix']['department_users'] = updated_users
+
+        # Update department-specific tokens
         if dept['id'] == 'support' and '${user_tokens[support_agent1]}':
             dept['matrix']['access_token'] = '${user_tokens[support_agent1]}'
             dept['matrix']['admin_access_token'] = '$admin_token'
@@ -452,12 +480,26 @@ try:
         if social.get('platform') == 'telegram':
             social['config']['bot_token'] = '$telegram_token'
 
+    # Update observer user with token and domain
+    if 'observer' in config:
+        config['observer']['user_id'] = f'@observer:{domain}'
+        config['observer']['access_token'] = '${user_tokens[observer]}'
+        config['observer']['enabled'] = True
+        config['observer']['auto_invite'] = True
+
+    # Update server CORS origins
+    if 'server' in config:
+        cors_list = '$cors_origins'.split(',')
+        config['server']['cors_origins'] = cors_list
+
     with open(config_file, 'w') as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
-    print("Tokens updated successfully", file=sys.stderr)
+    print("Configuration updated successfully", file=sys.stderr)
 except Exception as e:
     print(f"Warning: Could not update config.yaml: {e}", file=sys.stderr)
+    import traceback
+    traceback.print_exc(file=sys.stderr)
 PYEOF
 
     print_success "Configuration updated with tokens"
@@ -486,6 +528,9 @@ COMMERCE (4 users):
 IDENTIFICATION (2 users):
   identify_agent1 | identify1123 | Token: ${user_tokens[identify_agent1]}
   identify_agent2 | identify2123 | Token: ${user_tokens[identify_agent2]}
+
+OBSERVER (read-only access to all departments):
+  observer | observer123 | Token: ${user_tokens[observer]}
 EOF
 
     sudo chmod 600 "$INSTALL_DIR/data/user-credentials.txt"
