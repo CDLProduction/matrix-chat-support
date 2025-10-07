@@ -62,7 +62,7 @@ phase_preflight_checks() {
     # Check required commands
     print_step "Checking required commands..."
     local missing=0
-    for cmd in jq curl git tar; do
+    for cmd in jq curl git tar python3; do
         if ! command -v $cmd &> /dev/null; then
             print_error "$cmd is not installed"
             ((missing++))
@@ -71,10 +71,19 @@ phase_preflight_checks() {
         fi
     done
 
+    # Check for PyYAML Python module
+    print_step "Checking Python dependencies..."
+    if python3 -c "import yaml" 2>/dev/null; then
+        print_success "PyYAML is available"
+    else
+        print_error "PyYAML is not installed"
+        ((missing++))
+    fi
+
     if [ $missing -gt 0 ]; then
         echo ""
         print_info "Install missing packages:"
-        echo "  sudo apt update && sudo apt install -y jq curl git tar"
+        echo "  sudo apt update && sudo apt install -y jq curl git tar python3 python3-yaml"
         error_exit "Missing required commands"
     fi
 
