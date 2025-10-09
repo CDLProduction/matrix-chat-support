@@ -1,31 +1,35 @@
 {
   "chatRoomMapping": {
-    "429533702": {
-      "roomId": "!FpfssegzNfHoZhFGfu:localhost",
-      "departmentId": "support",
-      "userId": 429533702,
-      "username": "ikisseli"
-    },
     "467102462": {
-      "roomId": "!fCunPgcBYiVQVsKzJQ:localhost",
-      "departmentId": "support",
-      "userId": 467102462,
-      "username": "CristianSW_JV"
+      "support": {
+        "roomId": "!QHMdwZsMrWwxanFnJb:localhost",
+        "userId": 467102462,
+        "username": "CristianSW_JV"
+      },
+      "identification": {
+        "roomId": "!AQvFuVezHIHHtKkDyJ:localhost",
+        "userId": 467102462,
+        "username": "CristianSW_JV"
+      }
     }
   },
   "roomChatMapping": {
-    "!BCvuPryeMMNJvFjomu:localhost": 467102462,
-    "!FpfssegzNfHoZhFGfu:localhost": 429533702,
-    "!GiRHsWJWvCXOElzWbb:localhost": 467102462,
-    "!fCunPgcBYiVQVsKzJQ:localhost": 467102462
-  },
-  "telegramSpaces": {
-    "mainSpaceId": "!VsDdYUafomLuyKMZmr:localhost",
-    "departmentSpaces": {
-      "support": "!hSCHvWEaTlVUXndYJS:localhost",
-      "commerce": "!ZsQbIzTXxaHkcTrIuo:localhost",
-      "identification": "!lPltKgOOsBksmPgOkJ:localhost"
+    "!QHMdwZsMrWwxanFnJb:localhost": {
+      "telegramChatId": 467102462,
+      "departmentId": "support"
+    },
+    "!AQvFuVezHIHHtKkDyJ:localhost": {
+      "telegramChatId": 467102462,
+      "departmentId": "identification"
     }
   },
-  "lastUpdated": "2025-10-07T06:50:20.226Z"
+  "telegramSpaces": {
+    "mainSpaceId": "!VnixENYohJKvBNcwug:localhost",
+    "departmentSpaces": {
+      "support": "!NHwvfAIkIvECYlzpRb:localhost",
+      "commerce": "!nvubsHCKZitGcaQUkb:localhost",
+      "identification": "!bofVMMOalLnIAVxqmd:localhost"
+    }
+  },
+  "lastUpdated": "2025-10-07T09:23:45.561Z"
 }

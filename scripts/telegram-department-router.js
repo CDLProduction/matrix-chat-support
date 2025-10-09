@@ -24,8 +24,10 @@ const require = createRequire(import.meta.url);
 const EventSource = require('eventsource');
 
 // Store mapping between Telegram chats and Matrix rooms
-const chatRoomMapping = new Map(); // telegramChatId -> { roomId, departmentId, userId }
-const roomChatMapping = new Map(); // roomId -> telegramChatId
+// NEW STRUCTURE: telegramChatId -> Map(departmentId -> { roomId, userId })
+const chatRoomMapping = new Map(); // telegramChatId -> Map(departmentId -> { roomId, userId })
+const roomChatMapping = new Map(); // roomId -> { telegramChatId, departmentId }
+const activeDepartment = new Map(); // telegramChatId -> currently active departmentId
 
 // Persistent storage for mappings
 const MAPPINGS_FILE = '../data/chat-room-mappings.json';
@@ -36,17 +38,36 @@ function loadMappings() {
     if (fs.existsSync(MAPPINGS_FILE)) {
       const data = JSON.parse(fs.readFileSync(MAPPINGS_FILE, 'utf8'));
 
-      // Restore chatRoomMapping
+      // Restore chatRoomMapping (new structure: chatId -> Map(deptId -> {roomId, userId}))
       if (data.chatRoomMapping) {
-        for (const [chatId, mapping] of Object.entries(data.chatRoomMapping)) {
-          chatRoomMapping.set(parseInt(chatId), mapping);
+        for (const [chatId, deptMappings] of Object.entries(data.chatRoomMapping)) {
+          const deptMap = new Map();
+          // Handle both old structure (single object) and new structure (object of objects)
+          if (deptMappings.roomId) {
+            // Old structure: convert to new
+            deptMap.set(deptMappings.departmentId || 'support', {
+              roomId: deptMappings.roomId,
+              userId: deptMappings.userId
+            });
+          } else {
+            // New structure
+            for (const [deptId, mapping] of Object.entries(deptMappings)) {
+              deptMap.set(deptId, mapping);
+            }
+          }
+          chatRoomMapping.set(parseInt(chatId), deptMap);
         }
       }
 
-      // Restore roomChatMapping
+      // Restore roomChatMapping (updated structure: roomId -> {chatId, deptId})
       if (data.roomChatMapping) {
-        for (const [roomId, chatId] of Object.entries(data.roomChatMapping)) {
-          roomChatMapping.set(roomId, parseInt(chatId));
+        for (const [roomId, mapping] of Object.entries(data.roomChatMapping)) {
+          // Handle both old structure (just chatId) and new structure (object)
+          if (typeof mapping === 'number' || typeof mapping === 'string') {
+            roomChatMapping.set(roomId, { telegramChatId: parseInt(mapping), departmentId: 'support' });
+          } else {
+            roomChatMapping.set(roomId, mapping);
+          }
         }
       }
 
@@ -85,8 +106,14 @@ function saveMappings() {
       }
     }
 
+    // Convert chatRoomMapping (Map of Maps) to saveable format
+    const chatRoomMappingObj = {};
+    for (const [chatId, deptMap] of chatRoomMapping.entries()) {
+      chatRoomMappingObj[chatId] = Object.fromEntries(deptMap);
+    }
+
     const data = {
-      chatRoomMapping: Object.fromEntries(chatRoomMapping),
+      chatRoomMapping: chatRoomMappingObj,
       roomChatMapping: Object.fromEntries(roomChatMapping),
       telegramSpaces: {
         mainSpaceId: MAIN_TELEGRAM_SPACE_ID,
@@ -563,12 +590,13 @@ async function handleDepartmentSelection(departmentId, telegramUser, chatId) {
   try {
     const department = TELEGRAM_DEPARTMENT_SPACES[departmentId];
 
-    // Check if this user already has an existing room mapping
-    const existingMapping = chatRoomMapping.get(chatId);
+    // Check if this user already has an existing room mapping FOR THIS DEPARTMENT
+    const departmentMappings = chatRoomMapping.get(chatId); // Get Map of dept -> room
+    const existingMapping = departmentMappings ? departmentMappings.get(departmentId) : null;
 
     if (existingMapping && existingMapping.roomId) {
-      // User is returning to an existing conversation
-      console.log(`🔄 User ${telegramUser.username || chatId} returning to existing room ${existingMapping.roomId}`);
+      // User is returning to an existing conversation IN THE SAME DEPARTMENT
+      console.log(`🔄 User ${telegramUser.username || chatId} returning to existing room ${existingMapping.roomId} for ${departmentId}`);
 
       // Verify room is still accessible
       const roomAccessible = await verifyRoomAccess(existingMapping.roomId);
@@ -635,6 +663,9 @@ async function handleDepartmentSelection(departmentId, telegramUser, chatId) {
           }
         }
 
+        // Set as active department for message routing
+        activeDepartment.set(chatId, departmentId);
+
         // Simply reconnect without showing history (both sides already have it)
         await bot.sendMessage(chatId, `
 ✅ **Reconnected to ${department.name}**
@@ -650,10 +681,13 @@ Your conversation has been restored. You can continue chatting with our support 
           spaceId: department.spaceId
         };
       } else {
-        // Room no longer accessible, clear mapping and create new room
+        // Room no longer accessible, clear mapping for THIS DEPARTMENT and create new room
         console.log(`⚠️  Room ${existingMapping.roomId} no longer accessible, creating new room`);
-        chatRoomMapping.delete(chatId);
+        departmentMappings.delete(departmentId);
         roomChatMapping.delete(existingMapping.roomId);
+        if (departmentMappings.size === 0) {
+          chatRoomMapping.delete(chatId); // Remove chat entirely if no departments left
+        }
         saveMappings();
         // Fall through to create new room
       }
@@ -682,16 +716,26 @@ You can now send your messages directly, and they will be forwarded to our suppo
       }
     });
 
-    // Store mapping for message forwarding
-    chatRoomMapping.set(chatId, {
+    // Store mapping for message forwarding (new structure: per department)
+    let chatDeptMappings = chatRoomMapping.get(chatId);
+    if (!chatDeptMappings) {
+      chatDeptMappings = new Map();
+      chatRoomMapping.set(chatId, chatDeptMappings);
+    }
+    chatDeptMappings.set(departmentId, {
       roomId: roomInfo.roomId,
-      departmentId: departmentId,
       userId: telegramUser.id,
       username: telegramUser.username || telegramUser.first_name || chatId
     });
 
-    // Store reverse mapping for Matrix-to-Telegram forwarding
-    roomChatMapping.set(roomInfo.roomId, chatId);
+    // Store reverse mapping for Matrix-to-Telegram forwarding (with department info)
+    roomChatMapping.set(roomInfo.roomId, {
+      telegramChatId: chatId,
+      departmentId: departmentId
+    });
+
+    // Set as active department for message routing
+    activeDepartment.set(chatId, departmentId);
 
     // Save mappings to persistent storage
     saveMappings();
@@ -752,10 +796,19 @@ bot.on('message', async (msg) => {
   }
 
   const chatId = msg.chat.id;
-  const mapping = chatRoomMapping.get(chatId);
+
+  // Get currently active department for this chat
+  const currentDepartmentId = activeDepartment.get(chatId);
+  if (!currentDepartmentId) {
+    return; // No active department (user hasn't selected one yet)
+  }
+
+  // Get department-specific mapping
+  const departmentMappings = chatRoomMapping.get(chatId);
+  const mapping = departmentMappings ? departmentMappings.get(currentDepartmentId) : null;
 
   if (mapping && msg.text) {
-    // Forward message to Matrix room
+    // Forward message to the ACTIVE department's Matrix room
     try {
       await axios.put(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${mapping.roomId}/send/m.room.message/${Date.now()}`, {
         msgtype: 'm.text',
@@ -769,7 +822,7 @@ bot.on('message', async (msg) => {
         }
       });
 
-      console.log(`📨 Forwarded message from ${mapping.username} to Matrix room ${mapping.roomId}`);
+      console.log(`📨 Forwarded message from ${mapping.username} to ${currentDepartmentId} room ${mapping.roomId}`);
     } catch (error) {
       console.error('❌ Error forwarding message to Matrix:', error.response?.data || error.message);
     }
@@ -838,11 +891,13 @@ async function startMatrixEventStream() {
 
 // Handle Matrix messages and forward to Telegram
 async function handleMatrixMessage(roomId, event) {
-  const telegramChatId = roomChatMapping.get(roomId);
+  const mappingInfo = roomChatMapping.get(roomId);
 
-  if (!telegramChatId) {
+  if (!mappingInfo || !mappingInfo.telegramChatId) {
     return; // No Telegram chat mapped to this room
   }
+
+  const telegramChatId = mappingInfo.telegramChatId;
 
   // Enhanced filtering to prevent spam and loops
   const sender = event.sender;
@@ -863,7 +918,8 @@ async function handleMatrixMessage(roomId, event) {
   }
 
   try {
-    const senderName = sender.replace('@', '').replace(':localhost', '');
+    // Extract username without domain (e.g., @user:domain → user)
+    const senderName = sender.replace('@', '').split(':')[0];
 
     // Simple message format - no special formatting to avoid issues
     const message = `${senderName}: ${messageBody}`;

@@ -17,6 +17,7 @@ departments:
         - "@support_agent1:localhost"
         - "@support_agent2:localhost"
         - "@support_agent3:localhost"
+        - "@observer:localhost"
       spaceConfig:
         channelId: "web-chat"
         autoCreateDepartmentSpace: true
@@ -41,6 +42,7 @@ departments:
         - "@commerce_agent2:localhost"
         - "@commerce_agent3:localhost"
         - "@commerce_agent4:localhost"
+        - "@observer:localhost"
       spaceConfig:
         channelId: "web-chat"
         autoCreateDepartmentSpace: true
@@ -63,6 +65,7 @@ departments:
       department_users:
         - "@identify_agent1:localhost"
         - "@identify_agent2:localhost"
+        - "@observer:localhost"
       spaceConfig:
         channelId: "web-chat"
         autoCreateDepartmentSpace: true

@@ -887,35 +887,65 @@ export class MatrixChatClient {
           }
         }
 
-        // Invite observer user if configured (read-only access)
+        // Set read-only permissions for observer user (now in department_users)
         if ((window as any).__MATRIX_CONFIG__?.observer?.enabled &&
             (window as any).__MATRIX_CONFIG__?.observer?.auto_invite) {
           try {
             const observerUserId = (window as any).__MATRIX_CONFIG__.observer.user_id
 
-            // Invite observer to the room
-            await supportBotClient.invite(this.currentRoomId, observerUserId)
-            console.log('Invited observer user to room (read-only)')
+            // Wait a moment for observer to join
+            await new Promise(resolve => setTimeout(resolve, 1000))
 
-            // Also invite observer to the department space
-            if (spaceContext?.departmentSpaceId) {
-              try {
-                await supportBotClient.invite(spaceContext.departmentSpaceId, observerUserId)
-                console.log('Invited observer user to space (read-only)')
-              } catch (spaceError) {
-                console.warn('Failed to invite observer to department space:', spaceError)
+            // Set power levels for all users
+            const powerLevelsEvent = await supportBotClient.getStateEvent(
+              this.currentRoomId,
+              'm.room.power_levels',
+              ''
+            )
+
+            if (powerLevelsEvent) {
+              powerLevelsEvent.users = powerLevelsEvent.users || {}
+
+              // Set department users to power level 50 (can send messages)
+              if (this.config.departmentUsers && Array.isArray(this.config.departmentUsers)) {
+                for (const userId of this.config.departmentUsers) {
+                  // Observer gets 0, everyone else gets 50
+                  if (userId === observerUserId) {
+                    powerLevelsEvent.users[userId] = 0  // Observer: read-only
+                  } else {
+                    powerLevelsEvent.users[userId] = 50  // Department users: can send messages
+                  }
+                }
               }
+
+              powerLevelsEvent.events_default = powerLevelsEvent.events_default || 0
+
+              // Ensure sending messages requires higher power level
+              if (powerLevelsEvent.events_default < 10) {
+                powerLevelsEvent.events_default = 10  // Require level 10 to send messages
+              }
+
+              await supportBotClient.sendStateEvent(
+                this.currentRoomId,
+                'm.room.power_levels',
+                powerLevelsEvent,
+                ''
+              )
+
+              console.log('Set power levels: observer=0 (read-only), department_users=50 (can send)')
             }
           } catch (error) {
-            console.warn('Failed to invite observer user:', error)
+            console.warn('Failed to set power levels:', error)
           }
         }
 
         // Send initial context message as support bot
         const departmentContext = departmentInfo ? `\nDepartment: ${departmentInfo.name} (${departmentInfo.id})` : ''
+        // Extract username without domain (e.g., @user:domain → @user)
+        const displayUsername = currentUserId.split(':')[0]
         const contextMessage = session.isReturningUser && session.conversationCount > 0
-          ? `Returning customer: ${userDetails.name}\nPrevious conversations: ${session.conversationCount}${departmentContext}\n\nContact: ${userDetails.email}${userDetails.phone ? ` | ${userDetails.phone}` : ''}\n\nConnected as: ${currentUserId}`
-          : `New customer: ${userDetails.name}${departmentContext}\nContact: ${userDetails.email}${userDetails.phone ? ` | ${userDetails.phone}` : ''}\n\nConnected as: ${currentUserId}`
+          ? `Returning customer: ${userDetails.name}\nPrevious conversations: ${session.conversationCount}${departmentContext}\n\nContact: ${userDetails.email}${userDetails.phone ? ` | ${userDetails.phone}` : ''}\n\nConnected as: ${displayUsername}`
+          : `New customer: ${userDetails.name}${departmentContext}\nContact: ${userDetails.email}${userDetails.phone ? ` | ${userDetails.phone}` : ''}\n\nConnected as: ${displayUsername}`
 
         await supportBotClient.sendTextMessage(this.currentRoomId, contextMessage)
         

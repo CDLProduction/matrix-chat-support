@@ -298,6 +298,17 @@ function buildDepartmentClientConfig() {
     })
   }
 
+  // Add observer configuration if available
+  if (config.observer) {
+    baseConfig.observer = {
+      enabled: config.observer.enabled,
+      user_id: config.observer.user_id,
+      display_name: config.observer.display_name,
+      auto_invite: config.observer.auto_invite,
+      permissions: config.observer.permissions
+    }
+  }
+
   return baseConfig
 }
 

@@ -140,12 +140,10 @@ const ChatWidget: React.FC<MatrixChatWidgetProps> = ({ config, onError, onConnec
         }
         // If success, attemptReconnection already set currentStep: 'chat'
       } else {
-        // No existing room - go to form to create new chat
-        console.log('[CHANNEL_SELECT] No existing room found, showing form for new chat')
-        setChatState(prev => ({
-          ...prev,
-          currentStep: 'user-form'
-        }))
+        // No existing room for this department, but we have userDetails
+        // Automatically create a new room for this department
+        console.log('[CHANNEL_SELECT] No existing room found, creating new room with existing user details')
+        await handleStartChatForDepartmentSwitch(chatState.userDetails, chatState.selectedDepartment)
       }
     } else if (channel.type === 'social') {
       // Social media channel
